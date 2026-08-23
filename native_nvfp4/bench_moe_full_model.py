@@ -77,17 +77,37 @@ def checkpoint_payloads(model: Path) -> tuple[int, list[int], int]:
     return upfront, moe_by_layer, complete
 
 
-def load_embedding_row(model: Path, token_id: int) -> np.ndarray:
-    name = "model.language_model.embed_tokens.weight"
-    index = json.loads(
-        (model / "model.safetensors.index.json").read_text(encoding="utf-8")
-    )["weight_map"]
-    with safe_open(model / index[name], framework="pt", device="cpu") as shard:
-        shape = shard.get_slice(name).get_shape()
-        if token_id < 0 or token_id >= shape[0]:
-            raise ValueError(f"token ID {token_id} is outside vocabulary {shape[0]}")
-        row = shard.get_slice(name)[token_id : token_id + 1]
-        return np.ascontiguousarray(row.float().numpy())
+class LazyEmbeddingRows:
+    """Keep the BF16 embedding mmap open while touching requested rows only."""
+
+    def __init__(self, model: Path):
+        self.name = "model.language_model.embed_tokens.weight"
+        index = json.loads(
+            (model / "model.safetensors.index.json").read_text(encoding="utf-8")
+        )["weight_map"]
+        self._context = safe_open(
+            model / index[self.name], framework="pt", device="cpu"
+        )
+        self._shard = self._context.__enter__()
+        self._slice = self._shard.get_slice(self.name)
+        self.shape = self._slice.get_shape()
+        self._closed = False
+
+    def row(self, token_id: int) -> np.ndarray:
+        if self._closed:
+            raise RuntimeError("embedding table is closed")
+        if token_id < 0 or token_id >= self.shape[0]:
+            raise ValueError(
+                f"token ID {token_id} is outside vocabulary {self.shape[0]}"
+            )
+        value = self._slice[token_id : token_id + 1]
+        return np.ascontiguousarray(value.float().numpy())
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._context.__exit__(None, None, None)
+        self._closed = True
 
 
 @dataclass
@@ -335,6 +355,10 @@ class OrnithModelRegistry:
         for slot in self.layers:
             slot.attention.reset()
 
+    def begin_sequence(self) -> None:
+        self.reset()
+        self.runtime.synchronize()
+
     def enqueue_layer(self, layer: int, source: Any, destination: Any) -> Any:
         slot = self.layers[layer]
         if slot.bank is None:
@@ -361,9 +385,10 @@ class OrnithModelRegistry:
             destination,
         )
 
-    def execute(
+    def step(
         self,
         hidden: np.ndarray,
+        position: int,
         *,
         sync_each_layer: bool,
     ) -> tuple[np.ndarray, float, float]:
@@ -373,9 +398,13 @@ class OrnithModelRegistry:
             raise RuntimeError("complete model execution requires all 40 banks")
         if self.head is None:
             raise RuntimeError("LM head is unavailable")
-        self.reset()
+        if position < 0 or position >= self.max_tokens:
+            raise ValueError("position is outside the resident context capacity")
+        cos, sin = rope(position)
+        self.cos.upload(cos)
+        self.sin.upload(sin)
         self.input.upload(hidden)
-        # Finish state resets and input upload outside the measured token step.
+        # Finish embedding/rope uploads outside the measured device token step.
         self.runtime.synchronize()
         started = time.perf_counter_ns()
         current = self.input
@@ -391,6 +420,15 @@ class OrnithModelRegistry:
         logits = self.head.logits.download((1, self.head.vocab_size))
         wall_ms = (time.perf_counter_ns() - started) / 1e6
         return logits, kernel_ns / 1e6, wall_ms
+
+    def execute(
+        self,
+        hidden: np.ndarray,
+        *,
+        sync_each_layer: bool,
+    ) -> tuple[np.ndarray, float, float]:
+        self.begin_sequence()
+        return self.step(hidden, 0, sync_each_layer=sync_each_layer)
 
     def close(self) -> None:
         if self._closed:
@@ -422,6 +460,7 @@ def main() -> int:
     parser.add_argument("--token-id", type=int, default=248044)
     parser.add_argument("--warmups", type=int, default=1)
     parser.add_argument("--samples", type=int, default=5)
+    parser.add_argument("--generate-tokens", type=int, default=0)
     parser.add_argument("--results", type=Path, default=RESULTS)
     args = parser.parse_args()
     gates = [int(value) for value in args.gates.split(",")]
@@ -433,6 +472,8 @@ def main() -> int:
         or args.max_tokens <= 0
         or args.warmups < 0
         or args.samples <= 0
+        or args.generate_tokens < 0
+        or args.generate_tokens > args.max_tokens
     ):
         parser.error("invalid gates, context, warmups, or sample count")
 
@@ -449,7 +490,8 @@ def main() -> int:
     upfront_payload, moe_payloads, complete_payload = checkpoint_payloads(
         args.model
     )
-    hidden = load_embedding_row(args.model, args.token_id)
+    embeddings = LazyEmbeddingRows(args.model)
+    hidden = embeddings.row(args.token_id)
     validation_input = np.ascontiguousarray(
         np.random.default_rng(20260822)
         .standard_normal((1, HIDDEN))
@@ -464,6 +506,7 @@ def main() -> int:
     checkpoint_payload = upfront_payload
     load_started = time.perf_counter()
     full_result: dict[str, Any] | None = None
+    generation_result: dict[str, Any] | None = None
     before_release = baseline_available
     after_release = baseline_available
     try:
@@ -572,6 +615,116 @@ def main() -> int:
                 flush=True,
             )
 
+            if args.generate_tokens:
+
+                def generate(
+                    sync_each_layer: bool,
+                ) -> tuple[
+                    list[int],
+                    list[np.ndarray],
+                    list[float],
+                    list[float],
+                    list[float],
+                ]:
+                    registry.begin_sequence()
+                    token = args.token_id
+                    tokens = [token]
+                    logits_by_position: list[np.ndarray] = []
+                    kernel_ms: list[float] = []
+                    device_wall_ms: list[float] = []
+                    end_to_end_ms: list[float] = []
+                    for position in range(args.generate_tokens):
+                        host_started = time.perf_counter_ns()
+                        token_hidden = embeddings.row(token)
+                        logits, kernel, device_wall = registry.step(
+                            token_hidden,
+                            position,
+                            sync_each_layer=sync_each_layer,
+                        )
+                        token = int(np.argmax(logits))
+                        end_to_end = (
+                            time.perf_counter_ns() - host_started
+                        ) / 1e6
+                        tokens.append(token)
+                        logits_by_position.append(logits)
+                        kernel_ms.append(kernel)
+                        device_wall_ms.append(device_wall)
+                        end_to_end_ms.append(end_to_end)
+                    return (
+                        tokens,
+                        logits_by_position,
+                        kernel_ms,
+                        device_wall_ms,
+                        end_to_end_ms,
+                    )
+
+                (
+                    generated_tokens,
+                    generated_logits,
+                    generation_kernel,
+                    generation_device_wall,
+                    generation_end_to_end,
+                ) = generate(False)
+                (
+                    oracle_tokens,
+                    oracle_generation_logits,
+                    oracle_generation_kernel,
+                    oracle_generation_device_wall,
+                    _oracle_end_to_end,
+                ) = generate(True)
+                generation_maximum_error = max(
+                    float(np.max(np.abs(actual - expected)))
+                    for actual, expected in zip(
+                        generated_logits,
+                        oracle_generation_logits,
+                        strict=True,
+                    )
+                )
+                if generated_tokens != oracle_tokens:
+                    raise RuntimeError(
+                        "stateful generation token sequence differs from oracle"
+                    )
+                if generation_maximum_error > 1e-6:
+                    raise RuntimeError(
+                        "stateful generation logits differ from oracle: "
+                        f"max_abs={generation_maximum_error}"
+                    )
+                generation_result = {
+                    "input_token_id": args.token_id,
+                    "generated_token_ids": generated_tokens[1:],
+                    "sequence_token_ids": generated_tokens,
+                    "tokens_generated": args.generate_tokens,
+                    "crossed_first_kv_page_boundary": args.generate_tokens > 16,
+                    "kernel_ms_per_token": describe(generation_kernel),
+                    "device_wall_ms_per_token": describe(
+                        generation_device_wall
+                    ),
+                    "end_to_end_wall_ms_per_token": describe(
+                        generation_end_to_end
+                    ),
+                    "end_to_end_tokens_per_second": (
+                        1000.0 / statistics.mean(generation_end_to_end)
+                    ),
+                    "layer_synchronized_kernel_ms_per_token": describe(
+                        oracle_generation_kernel
+                    ),
+                    "layer_synchronized_device_wall_ms_per_token": describe(
+                        oracle_generation_device_wall
+                    ),
+                    "maximum_absolute_error_vs_layer_synchronized_oracle": (
+                        generation_maximum_error
+                    ),
+                    "token_sequence_matches_oracle": True,
+                }
+                print(
+                    f"generated_tokens={args.generate_tokens} "
+                    f"kernel_ms={statistics.median(generation_kernel):.6f} "
+                    f"end_to_end_ms={statistics.median(generation_end_to_end):.6f} "
+                    f"tokens_per_second={generation_result['end_to_end_tokens_per_second']:.6f} "
+                    f"max_abs={generation_maximum_error:.8g}",
+                    flush=True,
+                )
+
         before_release = memory_status().available_physical
         registry.close()
         registry = None
@@ -617,6 +770,7 @@ def main() -> int:
             },
             "gates": gate_records,
             "full_token": full_result,
+            "generation": generation_result,
             "correctness": {
                 "passed": True,
                 "gates_validated": len(gate_records),
@@ -629,6 +783,7 @@ def main() -> int:
                     or checkpoint_payload == complete_payload
                 ),
                 "full_token_executed": full_result is not None,
+                "stateful_generation_executed": generation_result is not None,
                 "explicit_completion_marker": True,
             },
             "limitations": [
@@ -639,7 +794,15 @@ def main() -> int:
             ],
         }
         args.results.mkdir(parents=True, exist_ok=True)
-        suffix = "full-model-token" if full_result is not None else "full-model-residency"
+        suffix = (
+            "full-model-generation"
+            if generation_result is not None
+            else (
+                "full-model-token"
+                if full_result is not None
+                else "full-model-residency"
+            )
+        )
         path = args.results / (
             f"{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S-%f')}-"
             f"moe-{suffix}.json"
@@ -654,6 +817,7 @@ def main() -> int:
     finally:
         if registry is not None:
             registry.close()
+        embeddings.close()
         runtime.close()
     return 0
 

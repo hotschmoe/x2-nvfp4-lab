@@ -38,6 +38,9 @@ Current highlights on an Adreno X2-90:
   expert banks, 32K BF16 KV capacity, final head, and one lazy embedding row.
   A real queued checkpoint token measures 75.884 ms kernel / 79.381 ms wall
   (**12.60 tok/s**) with exact composition-oracle logits.
+- A 32-token retained-state greedy loop crosses the KV page boundary at
+  **12.17 end-to-end tok/s**, with bit-identical logits and token IDs on a
+  layer-synchronized replay.
 - Independent CPU/GPU tensor oracles and isolated-process accelerator gates.
 
 Start with [CAMPAIGN_BANDWIDTH_FIRST.md](CAMPAIGN_BANDWIDTH_FIRST.md) and

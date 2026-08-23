@@ -1,0 +1,296 @@
+{
+  "campaign": "bandwidth-first",
+  "schema_version": 1,
+  "timestamp": "2026-08-23T04:30:21+00:00",
+  "hardware": {
+    "system_model": "ASUS Zenbook A16 UX3607OA",
+    "gpu": "Qualcomm(R) Adreno(TM) X2-90 GPU"
+  },
+  "software": {
+    "command": [
+      "native_nvfp4/bench_moe_full_model.py",
+      "--gates",
+      "24,30,35,40",
+      "--max-tokens",
+      "32768",
+      "--kv-dtype",
+      "bf16",
+      "--warmups",
+      "1",
+      "--samples",
+      "5",
+      "--generate-tokens",
+      "32"
+    ]
+  },
+  "environment": {
+    "power_source": "AC",
+    "battery_percent": 100,
+    "thermal_regime": "warm-burst"
+  },
+  "workload": {
+    "operation": "ornith_full_text_registry_and_token",
+    "layers": 40,
+    "loaded_banks": 40,
+    "gate_bank_counts": [
+      24,
+      30,
+      35,
+      40
+    ],
+    "max_tokens": 32768,
+    "kv_dtype": "bf16",
+    "lazy_embedding_rows_touched": 1,
+    "optional_vision_loaded": false,
+    "optional_mtp_loaded": false
+  },
+  "loading": {
+    "nonexpert_load_seconds": 5.605350600089878,
+    "total_load_and_validate_seconds": 24.148612900055014,
+    "total_load_benchmark_and_teardown_seconds": 31.669210600084625,
+    "upfront_checkpoint_native_payload_bytes": 1575512340,
+    "resident_checkpoint_native_payload_bytes": 19807914740,
+    "complete_text_compute_payload_bytes": 19807914740,
+    "expert_packed_scale_payload_bytes": 18190172160
+  },
+  "memory": {
+    "baseline_available_physical_bytes": 39641616384,
+    "before_release_available_physical_bytes": 18820468736,
+    "after_release_available_physical_bytes": 39220654080,
+    "recovered_on_release_bytes": 20400185344,
+    "reported_opencl_global_budget_bytes": 25563234304
+  },
+  "gates": [
+    {
+      "banks_resident": 24,
+      "last_layer": 23,
+      "checkpoint_native_payload_bytes": 12514953780,
+      "expert_packed_scale_payload_bytes": 10914103296,
+      "available_physical_bytes": 26173980672,
+      "available_delta_bytes": -13467635712,
+      "last_bank_load_and_validate_seconds": 0.459897099994123,
+      "last_bank_maximum_absolute_error": 6.402842700481415e-10,
+      "last_bank_selected_experts": [
+        46,
+        237,
+        43,
+        171,
+        36,
+        75,
+        148,
+        152
+      ]
+    },
+    {
+      "banks_resident": 30,
+      "last_layer": 29,
+      "checkpoint_native_payload_bytes": 15249814140,
+      "expert_packed_scale_payload_bytes": 13642629120,
+      "available_physical_bytes": 23423340544,
+      "available_delta_bytes": -16218275840,
+      "last_bank_load_and_validate_seconds": 0.5421237000264227,
+      "last_bank_maximum_absolute_error": 9.313225746154785e-10,
+      "last_bank_selected_experts": [
+        106,
+        195,
+        53,
+        131,
+        190,
+        51,
+        56,
+        102
+      ]
+    },
+    {
+      "banks_resident": 35,
+      "last_layer": 34,
+      "checkpoint_native_payload_bytes": 17528864440,
+      "expert_packed_scale_payload_bytes": 15916400640,
+      "available_physical_bytes": 21129515008,
+      "available_delta_bytes": -18512101376,
+      "last_bank_load_and_validate_seconds": 0.546283399919048,
+      "last_bank_maximum_absolute_error": 2.3283064365386963e-09,
+      "last_bank_selected_experts": [
+        234,
+        34,
+        70,
+        176,
+        138,
+        29,
+        252,
+        32
+      ]
+    },
+    {
+      "banks_resident": 40,
+      "last_layer": 39,
+      "checkpoint_native_payload_bytes": 19807914740,
+      "expert_packed_scale_payload_bytes": 18190172160,
+      "available_physical_bytes": 18875879424,
+      "available_delta_bytes": -20765736960,
+      "last_bank_load_and_validate_seconds": 1.21487500006333,
+      "last_bank_maximum_absolute_error": 9.313225746154785e-10,
+      "last_bank_selected_experts": [
+        36,
+        45,
+        92,
+        208,
+        1,
+        250,
+        17,
+        10
+      ]
+    }
+  ],
+  "full_token": {
+    "input_token_id": 248044,
+    "greedy_output_token_id": 95726,
+    "queued_kernel_ms": {
+      "median": 76.496,
+      "p10": 75.56924000000001,
+      "p90": 77.89548,
+      "minimum": 75.4166,
+      "maximum": 78.733
+    },
+    "queued_wall_ms": {
+      "median": 79.6378,
+      "p10": 78.99252,
+      "p90": 84.48334,
+      "minimum": 78.592,
+      "maximum": 87.5311
+    },
+    "first_queued_kernel_ms": 76.1618,
+    "first_queued_wall_ms": 79.9549,
+    "layer_synchronized_kernel_ms": 74.2013,
+    "layer_synchronized_wall_ms": 83.8247,
+    "maximum_absolute_error_vs_layer_synchronized_oracle": 0.0,
+    "finite_logits": true
+  },
+  "generation": {
+    "input_token_id": 248044,
+    "generated_token_ids": [
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726
+    ],
+    "sequence_token_ids": [
+      248044,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726,
+      95726
+    ],
+    "tokens_generated": 32,
+    "crossed_first_kv_page_boundary": true,
+    "kernel_ms_per_token": {
+      "median": 76.15129999999999,
+      "p10": 75.61307000000001,
+      "p90": 77.02514000000001,
+      "minimum": 75.0145,
+      "maximum": 79.5979
+    },
+    "device_wall_ms_per_token": {
+      "median": 80.16095,
+      "p10": 79.22413999999999,
+      "p90": 82.3916,
+      "minimum": 78.905,
+      "maximum": 85.0829
+    },
+    "end_to_end_wall_ms_per_token": {
+      "median": 81.3112,
+      "p10": 80.46346,
+      "p90": 84.96874000000001,
+      "minimum": 79.7384,
+      "maximum": 90.5924
+    },
+    "end_to_end_tokens_per_second": 12.171928489920122,
+    "layer_synchronized_kernel_ms_per_token": {
+      "median": 74.38204999999999,
+      "p10": 74.20595,
+      "p90": 74.7941,
+      "minimum": 74.1348,
+      "maximum": 74.8358
+    },
+    "layer_synchronized_device_wall_ms_per_token": {
+      "median": 86.4871,
+      "p10": 84.53702,
+      "p90": 94.95881,
+      "minimum": 83.6795,
+      "maximum": 98.8988
+    },
+    "maximum_absolute_error_vs_layer_synchronized_oracle": 0.0,
+    "token_sequence_matches_oracle": true
+  },
+  "correctness": {
+    "passed": true,
+    "gates_validated": 4,
+    "maximum_gate_bank_error": 2.3283064365386963e-09,
+    "complete_text_payload_accounted": true,
+    "full_token_executed": true,
+    "stateful_generation_executed": true,
+    "explicit_completion_marker": true
+  },
+  "limitations": [
+    "one request and one decoded token; sustained generation is not measured",
+    "greedy argmax is performed after downloading full logits",
+    "available physical memory is system-wide, not an OpenCL allocator counter",
+    "vision and MTP tensors are intentionally excluded from the coding endpoint"
+  ]
+}

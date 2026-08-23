@@ -295,6 +295,15 @@ Single-queue logits are bit-identical to the same graph synchronized after each
 layer. The next correctness boundary is retained-state autoregressive decoding,
 not a larger residency projection.
 
+That boundary now passes for 32 consecutive greedy steps. All recurrent,
+convolution, and BF16 KV state is retained, the sequence crosses the first KV
+page boundary, and the replayed full logits are bit-identical at every position.
+Median kernel time is 76.1513 ms/token, median host-loop wall is 81.3112 ms, and
+mean end-to-end throughput is 12.17 tok/s. Because the local checkpoint lacked
+tokenizer files during this gate, a raw BOS-only seed repeats token 95,726; it
+is not a coding-quality result. The official tokenizer/chat template is the
+next prompt-level gate.
+
 ## First decoder benchmarks
 
 Direct row-scaled FP8 kernels now accompany NVFP4 in the persistent runtime. A

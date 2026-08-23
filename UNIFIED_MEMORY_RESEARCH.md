@@ -551,10 +551,10 @@ The earlier crashes make benchmark containment part of the architecture:
 
 Prioritized next questions, including work not yet performed:
 
-1. **Sustained autoregressive token loop.** The complete 40-layer token now
-   measures 75.8837 ms kernel / 79.3810 ms wall with all weights and 32K BF16 KV
-   capacity resident. Retain state across generated tokens, gather each next
-   embedding row lazily, and qualify throughput/output over a real prompt.
+1. **Tokenizer-backed coding generation.** A 32-token retained-state loop now
+   crosses the first KV page at 12.17 end-to-end tok/s with exact replay. Add the
+   official tokenizer/chat template, prefill a real coding request, and validate
+   readable output rather than the current raw-ID BOS seed.
 2. **Further MoE fusion.** Device-resident 256-way top-8 and contiguous-bank
    dispatch now pass. Next compare fused gate/up, SiLU/down, shared-slot, and
    weighted-reduction variants, and expose per-kernel component timing.
@@ -646,6 +646,7 @@ OpenCL/SVM-native; CUDA pointer tables and graph capture are not portable here.
 
 ## Research sources
 
+- [Official Ornith 1.5 35B NVFP4 checkpoint](https://huggingface.co/ornith-ai/Ornith-1.5-35B-A3B-NVFP4)
 - [FreeToken paper](https://arxiv.org/html/2608.16157)
 - [FreeToken inference engine](https://github.com/FlashML-org/FreeToken)
 - [MLX unified memory](https://ml-explore.github.io/mlx/build/html/usage/unified_memory.html)

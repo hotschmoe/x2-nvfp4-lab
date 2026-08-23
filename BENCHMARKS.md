@@ -614,3 +614,24 @@ be measured.
 
 Canonical artifact:
 `20260823-042544-384217-moe-full-model-token.json`.
+
+## Retained-state 35B MoE generation
+
+The same full registry now keeps all causal-convolution, gated-delta, and paged
+KV state across 32 greedy steps. Each output token selects one BF16 embedding
+row from the still-lazy CPU mapping; the full vocabulary logits are downloaded
+for host argmax. Token 17 forces every full-attention layer across the first
+16-token KV page boundary.
+
+| Stateful decode | Median kernel/token | Median device wall/token | Median end-to-end/token | Mean end-to-end throughput | Replay error |
+|---|---:|---:|---:|---:|---:|
+| 32 generated tokens | 76.1513 ms | 80.1610 ms | 81.3112 ms | 12.17 tok/s | `0` |
+
+The complete sequence and every one of the 32 full logit vectors are
+bit-identical when the model is reset and replayed with a synchronization after
+each layer. The BOS-only raw-ID seed repeats token 95,726, so this is a state,
+page-lifecycle, and sustained-throughput gate rather than a language-quality
+claim. A tokenizer-backed coding prompt is the next qualification.
+
+Canonical artifact:
+`20260823-043021-424329-moe-full-model-generation.json`.

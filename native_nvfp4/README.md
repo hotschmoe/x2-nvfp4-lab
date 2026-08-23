@@ -112,6 +112,9 @@ scripts/run-isolated.ps1 -Executable $python -TimeoutSeconds 300 `
 scripts/run-isolated.ps1 -Executable $python -TimeoutSeconds 1200 `
   -CompletionMarker 'MOE_FULL_MODEL_REGISTRY_PASS' `
   -CommandLine '-3 native_nvfp4/bench_moe_full_model.py --gates 24,30,35,40 --max-tokens 32768 --kv-dtype bf16 --warmups 3 --samples 20'
+scripts/run-isolated.ps1 -Executable $python -TimeoutSeconds 1200 `
+  -CompletionMarker 'MOE_FULL_MODEL_REGISTRY_PASS' `
+  -CommandLine '-3 native_nvfp4/bench_moe_full_model.py --gates 24,30,35,40 --max-tokens 32768 --kv-dtype bf16 --warmups 1 --samples 5 --generate-tokens 32'
 
 # Exact sparse layer: BF16 route, shared expert, top-8 NVFP4 experts, reduction
 scripts/run-isolated.ps1 -Executable $python -TimeoutSeconds 180 `
