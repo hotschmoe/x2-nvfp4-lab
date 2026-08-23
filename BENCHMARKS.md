@@ -876,3 +876,56 @@ Direct vector decode winning here while scalar local decode wins GEMV is the
 strongest evidence so far that prefill and decode require different kernel
 families. The results remain isolated linears; TTFT claims wait for a correct
 multi-token model graph.
+
+## Promoted shape dispatch: full-model A/B
+
+The verified GEMV winners now sit behind a shape/phase dispatcher. Setting
+`VLLM_NVFP4_OPENCL_SHAPE_TUNING=0` restores the previous production selection.
+The result JSON records that switch explicitly.
+
+| Complete model | Dispatch | Kernel median | Wall median | Wall tok/s | Exact logits |
+|---|---|---:|---:|---:|---:|
+| dense 27B | previous | 514.155 ms | 520.621 ms | 1.921 | yes |
+| dense 27B | shape tuned | 430.741 ms | 436.060 ms | 2.293 | yes |
+| MoE 35B | previous | 76.468 ms | 80.611 ms | 12.405 | yes |
+| MoE 35B | shape-tuned head | 74.521 ms | 78.582 ms | 12.726 | yes |
+
+Dense improves 1.194x at both kernel and queued-wall boundaries. A second pair
+before the provenance-correct canonical run measured 512.11/518.28 ms previous
+and 429.11/435.36 ms tuned, reproducing the result in reverse order.
+
+The tuned dense command trace keeps the same 1,042 events and exact logits:
+
+| Dense stage | Previous trace | Tuned trace | Change |
+|---|---:|---:|---:|
+| NVFP4 linear kernels | 284.313 ms | 196.858 ms | -30.8% |
+| complete NVFP4 MLP stage | 287.452 ms | 199.966 ms | -30.4% |
+| summed full-token kernels | 515.306 ms | 429.024 ms | -16.7% |
+| first-start to last-end span | 518.042 ms | 430.480 ms | -16.9% |
+| inter-kernel gaps | 2.204 ms | 1.742 ms | still negligible |
+
+The 8.423 GB NVFP4 MLP payload now delivers 42.79 GB/s: 33.2% of the
+calibrated 129 GB/s ceiling and 18.8% of nominal 228 GB/s. Same-shape NVFP4 MLP
+layers now average 3.571 ms versus 5.207 ms for the FP8 tail, so the packed
+format finally converts its lower byte count into latency.
+
+Retained-state dense generation over the same 27-token prompt and 32-token cap
+reaches 2.243 end-to-end decode tok/s and 2.376 sequential-prefill tok/s, up from
+1.908 and 2.003. The measured 159-160 GFLOP/s GEMM winner is not yet integrated,
+so sequential prefill remains the TTFT bottleneck.
+
+Canonical artifacts:
+
+- `20260823-060651-814543-dense-full-model-token.json` (previous)
+- `20260823-060723-551631-dense-full-model-token.json` (tuned)
+- `20260823-060836-924873-moe-full-model-token.json` (previous)
+- `20260823-060913-864839-moe-full-model-token.json` (tuned)
+- `20260823-061008-508194-dense-full-model-trace.json`
+- `20260823-061211-329751-dense-full-model-generation.json`
+
+A separate 64-token BOS-only MoE retained-state stress run measures 11.700
+end-to-end tok/s with a 77.653 ms median decode kernel and exact replay
+(`20260823-061338-224847-moe-full-model-generation.json`). It is not directly
+comparable to the earlier 183-token coding prompt because prompt, positions,
+length, and thermal duration differ; the 12.726 tok/s single-token A/B is the
+controlled head-promotion result.

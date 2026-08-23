@@ -160,7 +160,7 @@ def measure_shape(
     ]
     failures: list[dict[str, Any]] = []
     correctness: dict[str, dict[str, Any]] = {}
-    timings: dict[str, list[float]] = {"production-r4-k1024": []}
+    timings: dict[str, list[float]] = {"production-dispatch": []}
 
     def run_production() -> float:
         runtime.linear_device(
@@ -208,7 +208,7 @@ def measure_shape(
                 failures.append({"configuration": name, "reason": str(error)})
 
         active: list[tuple[str, int, int, int] | tuple[str, None, None, None]] = [
-            ("production-r4-k1024", None, None, None),
+            ("production-dispatch", None, None, None),
             *accepted,
         ]
         for _ in range(warmups):
@@ -248,7 +248,7 @@ def measure_shape(
             )
         results.sort(key=lambda item: item["kernel_ms"]["median"])
         baseline = next(
-            item for item in results if item["configuration"] == "production-r4-k1024"
+            item for item in results if item["configuration"] == "production-dispatch"
         )
         for item in results:
             item["speedup_vs_production"] = (
@@ -259,7 +259,7 @@ def measure_shape(
             "rows": host.rows,
             "cols": host.cols,
             "weight_bytes": host.weight_bytes,
-            "correctness_oracle": "production row-tiled r4/k1024 output",
+            "correctness_oracle": "current production dispatch output",
             "correctness": correctness,
             "failures": failures,
             "ranking": results,
@@ -357,6 +357,9 @@ def main() -> int:
             "correctness_atol": 5e-5,
             "measured_bandwidth_ceiling_gbs": 129.0,
             "nominal_bandwidth_gbs": 228.0,
+            "production_shape_tuning_enabled": (
+                os.environ.get("VLLM_NVFP4_OPENCL_SHAPE_TUNING", "1") != "0"
+            ),
         },
         "shapes": shape_results,
         "limitations": [

@@ -41,6 +41,8 @@ The current boundary is deliberately explicit:
 - Dense 27B full residency also passes outside the adapter, including its last
   eight row-scaled-FP8 MLPs and row-scaled-FP8 LM head. The packaged graph now
   exposes resident FP8 MLP and LM-head fragments for that mixed checkpoint.
+  Shape-tuned NVFP4 dispatch reaches 2.293 full-token and 2.243 retained-state
+  decode tok/s with exact replay.
 
 The backend is opt-in so installing the plugin cannot hijack unrelated CPU
 vLLM deployments:
@@ -54,6 +56,10 @@ $env:VLLM_NVFP4_OPENCL_KERNEL = 'C:\path\to\nvfp4_gemv.cl'
 Set `VLLM_NVFP4_OPENCL_SVM=0` to force conventional copied buffers. Otherwise
 the runtime prefers shared SVM and falls back automatically if capability or
 allocation validation fails.
+
+Shape-specific GEMV/GEMM dispatch is enabled by default after complete-model
+A/B qualification. Set `VLLM_NVFP4_OPENCL_SHAPE_TUNING=0` before runtime
+creation to reproduce the previous kernel paths.
 
 The dense-Qwen paged serving seam keeps FP32 KV as the compatibility default.
 Set `VLLM_NVFP4_OPENCL_KV_DTYPE=bf16` (or pass `kv_dtype="bf16"` to

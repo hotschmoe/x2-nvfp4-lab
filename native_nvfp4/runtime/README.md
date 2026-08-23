@@ -61,3 +61,7 @@ before timing and still require full-model A/B before promotion.
 dynamic vector sharing and weight K tiles, plus direct-global scalar/vector
 controls. It is exercised by `native_nvfp4/bench_nvfp4_gemm_lab.py` and is not a
 production dispatch promise.
+
+Shape-specific winners are enabled in production dispatch by default. Set
+`VLLM_NVFP4_OPENCL_SHAPE_TUNING=0` before runtime creation for the reproducible
+previous-path control. The full-model benchmark JSON records this setting.

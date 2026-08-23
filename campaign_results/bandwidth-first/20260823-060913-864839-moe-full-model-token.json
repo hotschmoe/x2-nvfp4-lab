@@ -1,0 +1,122 @@
+{
+  "campaign": "bandwidth-first",
+  "schema_version": 1,
+  "timestamp": "2026-08-23T06:09:13+00:00",
+  "hardware": {
+    "system_model": "ASUS Zenbook A16 UX3607OA",
+    "gpu": "Qualcomm(R) Adreno(TM) X2-90 GPU"
+  },
+  "software": {
+    "command": [
+      "native_nvfp4/bench_moe_full_model.py",
+      "--gates",
+      "40",
+      "--max-tokens",
+      "32768",
+      "--kv-dtype",
+      "bf16",
+      "--warmups",
+      "3",
+      "--samples",
+      "15"
+    ]
+  },
+  "environment": {
+    "power_source": "AC",
+    "battery_percent": 100,
+    "thermal_regime": "warm-burst",
+    "shape_tuning_enabled": true
+  },
+  "workload": {
+    "operation": "ornith_full_text_registry_and_token",
+    "layers": 40,
+    "loaded_banks": 40,
+    "gate_bank_counts": [
+      40
+    ],
+    "max_tokens": 32768,
+    "kv_dtype": "bf16",
+    "lazy_embedding_rows_touched": 1,
+    "optional_vision_loaded": false,
+    "optional_mtp_loaded": false
+  },
+  "loading": {
+    "nonexpert_load_seconds": 5.571544499951415,
+    "total_load_and_validate_seconds": 26.816847900045104,
+    "total_load_benchmark_and_teardown_seconds": 29.74580579996109,
+    "upfront_checkpoint_native_payload_bytes": 1575512340,
+    "resident_checkpoint_native_payload_bytes": 19807914740,
+    "complete_text_compute_payload_bytes": 19807914740,
+    "expert_packed_scale_payload_bytes": 18190172160
+  },
+  "memory": {
+    "baseline_available_physical_bytes": 39143596032,
+    "before_release_available_physical_bytes": 18422583296,
+    "after_release_available_physical_bytes": 38881873920,
+    "recovered_on_release_bytes": 20459290624,
+    "reported_opencl_global_budget_bytes": 25563234304
+  },
+  "gates": [
+    {
+      "banks_resident": 40,
+      "last_layer": 39,
+      "checkpoint_native_payload_bytes": 19807914740,
+      "expert_packed_scale_payload_bytes": 18190172160,
+      "available_physical_bytes": 18422886400,
+      "available_delta_bytes": -20720709632,
+      "last_bank_load_and_validate_seconds": 1.2189050999004394,
+      "last_bank_maximum_absolute_error": 9.313225746154785e-10,
+      "last_bank_selected_experts": [
+        36,
+        45,
+        92,
+        208,
+        1,
+        250,
+        17,
+        10
+      ]
+    }
+  ],
+  "full_token": {
+    "input_token_id": 248044,
+    "greedy_output_token_id": 95726,
+    "queued_kernel_ms": {
+      "median": 74.5212,
+      "p10": 73.76336,
+      "p90": 75.347,
+      "minimum": 73.4485,
+      "maximum": 75.4162
+    },
+    "queued_wall_ms": {
+      "median": 78.5815,
+      "p10": 77.9436,
+      "p90": 79.2189,
+      "minimum": 77.6614,
+      "maximum": 79.363
+    },
+    "first_queued_kernel_ms": 74.5162,
+    "first_queued_wall_ms": 78.3003,
+    "layer_synchronized_kernel_ms": 72.1107,
+    "layer_synchronized_wall_ms": 82.7997,
+    "maximum_absolute_error_vs_layer_synchronized_oracle": 0.0,
+    "finite_logits": true
+  },
+  "generation": null,
+  "correctness": {
+    "passed": true,
+    "gates_validated": 1,
+    "maximum_gate_bank_error": 9.313225746154785e-10,
+    "complete_text_payload_accounted": true,
+    "full_token_executed": true,
+    "stateful_generation_executed": false,
+    "explicit_completion_marker": true
+  },
+  "limitations": [
+    "one request and one decoded token; sustained generation is not measured",
+    "prefill is sequential batch-one execution rather than shared-weight GEMM",
+    "greedy argmax is performed after downloading full logits",
+    "available physical memory is system-wide, not an OpenCL allocator counter",
+    "vision and MTP tensors are intentionally excluded from the coding endpoint"
+  ]
+}

@@ -567,8 +567,10 @@ Prioritized next questions, including work not yet performed:
 3. **NVFP4 decode and MoE fusion.** The first 350-treatment hardware sweep now
    proves output tiling is shape-specific: dense reaches about 45 GB/s at
    r16/k8192, the head reaches 40.86 GB/s at r8/k2048-4096, and expert down
-   remains at 23.44 GB/s near r4/k512. Promote and full-model A/B these winners;
-   then compare fused SiLU/down/shared reduction and replace the current
+   remains at 23.44 GB/s near r4/k512. Dense promotion now passes at 2.293
+   full-token and 2.243 sustained tok/s; MoE head promotion reaches 12.726
+   full-token tok/s. Port the expert-bank treatments, then compare fused
+   SiLU/down/shared reduction and replace the current
    4.137 ms/token top-8 sequence with a fused router/selection design.
 4. **Atlas kernel and graph structure.** Audit its open-source Qwen3.5/GB10 MoE,
    recurrent-layer, paged-KV, CUDA-graph, and MTP paths for reusable scheduling

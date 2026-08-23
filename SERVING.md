@@ -25,7 +25,9 @@ The row-tiled NVFP4 decode kernel subsequently reached 47.07 ms (21.25 cadence
 tokens/s) with the same output RMS. Sustained results vary with Adreno DVFS, so
 serving qualification must report repeated distributions rather than one peak.
 
-The full 40-layer plus LM-head token measures 75.884 ms kernel / 79.381 ms wall.
+The shape-tuned full 40-layer plus LM-head token measures 74.521 ms kernel /
+78.582 ms wall (12.726 tok/s). The previous dispatch measured 76.468 / 80.611 ms
+in the canonical A/B.
 A tokenizer-backed coding request prefills sequentially at 13.86 tok/s and
 decodes at 11.75 end-to-end tok/s. It generates valid Python, stops on the
 official `<|im_end|>` token, and matches a layer-synchronized replay exactly at
@@ -33,7 +35,8 @@ every generated position.
 
 Dense 27B also reaches the full boundary: all 64 layers, 32K BF16 KV, mixed
 56-layer NVFP4/eight-layer FP8 MLP policy, and its full FP8 LM head measure
-511.961 ms kernel / 519.973 ms wall (1.923 tok/s). Per-layer checkpoint source
+430.741 ms kernel / 436.060 ms wall (2.293 tok/s). The previous dispatch measured
+514.155 / 520.621 ms in the canonical A/B. Per-layer checkpoint source
 mapping keeps transient load memory safely separate from final residency.
 
 ## Runtime contract to build next

@@ -53,7 +53,7 @@ def measure_case(
         for kind in range(4)
         for k_tile in (k_tiles if kind < 2 else k_tiles[:1])
     ]
-    timings: dict[str, list[float]] = {"production-v4-full-row": []}
+    timings: dict[str, list[float]] = {"production-dispatch": []}
     correctness: dict[str, dict[str, Any]] = {}
     failures: list[dict[str, str]] = []
 
@@ -104,7 +104,7 @@ def measure_case(
                 failures.append({"configuration": name, "reason": str(error)})
 
         active: list[tuple[str, int | None, int | None, int | None]] = [
-            ("production-v4-full-row", None, None, None),
+            ("production-dispatch", None, None, None),
             *accepted,
         ]
         for _ in range(warmups):
@@ -150,7 +150,7 @@ def measure_case(
         ranking.sort(key=lambda item: item["kernel_ms"]["median"])
         baseline = next(
             item for item in ranking
-            if item["configuration"] == "production-v4-full-row"
+            if item["configuration"] == "production-dispatch"
         )
         for item in ranking:
             item["speedup_vs_production"] = (
@@ -162,7 +162,7 @@ def measure_case(
             "cols": host.cols,
             "vectors": vectors,
             "weight_bytes": host.weight_bytes,
-            "correctness_oracle": "production vector-tiled v4/full-row output",
+            "correctness_oracle": "current production dispatch output",
             "correctness": correctness,
             "failures": failures,
             "ranking": ranking,
@@ -271,6 +271,9 @@ def main() -> int:
             ],
             "correctness_rtol": 5e-5,
             "correctness_atol": 5e-5,
+            "production_shape_tuning_enabled": (
+                os.environ.get("VLLM_NVFP4_OPENCL_SHAPE_TUNING", "1") != "0"
+            ),
         },
         "cases": cases,
         "limitations": [

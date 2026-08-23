@@ -395,3 +395,16 @@ one vector subgroup per work-group. The 2048x512 expert down crosses back to the
 production local kernel at eight vectors. Prefill and decode therefore need
 separate shape/phase dispatch, and isolated GEMM gains still need an exact
 attention/recurrent-aware TTFT A/B.
+
+The shape dispatcher now passes complete-model A/B. Dense falls from 514.155 to
+430.741 ms kernel and 520.621 to 436.060 ms queued wall, improving full-token
+throughput from 1.921 to 2.293 tok/s with bit-identical logits. A reverse-order
+pair reproduced the result. The tuned command trace attributes the change to
+NVFP4 linears: 284.313 to 196.858 ms, lifting useful NVFP4 delivery from 29.62
+to 42.79 GB/s. Retained-state decode reaches 2.243 tok/s versus the previous
+1.908.
+
+MoE changes only the standalone head in this milestone because its experts use
+the contiguous bank kernels. Complete-token kernel/wall falls from 76.468/80.611
+to 74.521/78.582 ms, or 12.405 to 12.726 tok/s, again with exact logits. The
+expert-bank row/K treatment still needs a separate port and full-model A/B.

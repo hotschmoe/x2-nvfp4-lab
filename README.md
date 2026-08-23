@@ -36,8 +36,8 @@ Current highlights on an Adreno X2-90:
   independent CPU oracle at 9.145 ms kernel / 11.054 ms wall.
 - The complete Ornith coding text model now fits at once: all 40 layers, 40
   expert banks, 32K BF16 KV capacity, final head, and one lazy embedding row.
-  A real queued checkpoint token measures 75.884 ms kernel / 79.381 ms wall
-  (**12.60 tok/s**) with exact composition-oracle logits.
+  Shape-tuned head dispatch now measures 74.521 ms kernel / 78.582 ms wall
+  (**12.73 tok/s**) with exact composition-oracle logits.
 - A 32-token retained-state greedy loop crosses the KV page boundary at
   **12.17 end-to-end tok/s**, with bit-identical logits and token IDs on a
   layer-synchronized replay.
@@ -46,14 +46,14 @@ Current highlights on an Adreno X2-90:
   **13.86 prefill tok/s / 11.75 decode tok/s**, exact on full replay.
 - The dense 27B model now fits and executes too: all 64 layers, its mixed 56
   NVFP4 + 8 FP8 MLP policy, 32K BF16 KV, and the full FP8 head produce a real
-  checkpoint token at **1.923 tok/s**, again with exact queued composition.
-- Its tokenizer-backed retained-state loop sustains **1.908 end-to-end tok/s**
-  over 31 measured decode steps; 27-token sequential prefill runs at 2.003
+  checkpoint token at **2.293 tok/s**, again with exact queued composition.
+- Its tokenizer-backed retained-state loop sustains **2.243 end-to-end tok/s**
+  over 31 measured decode steps; 27-token sequential prefill runs at 2.376
   tok/s, and a layer-synchronized replay produces identical logits and tokens.
 - Barrier-free full-token traces now attribute 1,042 dense and 772 MoE OpenCL
-  events. Dense quantized linears consume **95.3%** of kernel time; same-shape
-  NVFP4 and FP8 MLP layers both take about 5.13 ms, isolating NVFP4 decode
-  efficiency as the primary dense target.
+  events. The baseline showed same-shape NVFP4 and FP8 MLP layers both near
+  5.13 ms; the tuned NVFP4 layers now average 3.57 ms while the FP8 tail remains
+  5.21 ms.
 - A correctness-gated 350-treatment kernel sweep now verifies that the best
   decode structure is shape-specific. Repeated dense winners reach about
   **45 GB/s** and cut isolated gate/up/down GEMV latency by **24-25%**; the MoE
@@ -62,6 +62,10 @@ Current highlights on an Adreno X2-90:
   dense GEMM and improves the current full-row local kernel by **1.11-1.49x**.
   Unlike decode, direct-global vector decode wins; short-K MoE down crosses back
   to the production local kernel at eight vectors.
+- Promoting the proven decode shapes cuts the dense NVFP4-linear trace from
+  284.31 to **196.86 ms** and full-token wall from 520.62 to **436.06 ms**.
+  NVFP4 useful delivery is now 42.8 GB/s, or 33.2% of the matched 129 GB/s
+  ceiling; the disable switch reproduces the old path.
 - Independent CPU/GPU tensor oracles and isolated-process accelerator gates.
 
 Start with [CAMPAIGN_BANDWIDTH_FIRST.md](CAMPAIGN_BANDWIDTH_FIRST.md) and

@@ -169,6 +169,25 @@ The next gate is not another isolated GFLOP/s number. A winner must enter a
 multi-token recurrent/attention-aware prefill graph and reduce tokenizer-backed
 TTFT without changing logits.
 
+## Production promotion
+
+The decode dispatcher now selects r16/k8192 scalar-local kernels for both dense
+projection directions, r8/k2048 for the MoE LM head, r16/k2048 for standalone
+expert gate/up, and r4/k512 for standalone expert down. The GEMM dispatcher uses
+direct-vector dense and expert-gate treatments while retaining production local
+expert down from eight vectors onward. Set
+`VLLM_NVFP4_OPENCL_SHAPE_TUNING=0` to restore the previous paths.
+
+Complete dense A/B improves 514.155 to 430.741 ms kernel and 520.621 to 436.060
+ms wall (1.194x), with a reverse-order pair reproducing the result. The tuned
+trace shows NVFP4 linears at 196.858 ms rather than 284.313 ms. Complete MoE A/B
+improves 76.468 to 74.521 ms kernel and 80.611 to 78.582 ms wall. Every complete
+model comparison returns bit-identical logits.
+
+Dense retained-state generation now reaches 2.243 decode tok/s and 2.376
+sequential-prefill tok/s. The latter does not use the multi-vector GEMM yet;
+integrating a semantically correct prompt graph remains the next TTFT gate.
+
 ## Primary references
 
 - [Qualcomm Snapdragon Mobile Platform OpenCL General Programming and Optimization Guide](https://docs.qualcomm.com/bundle/publicresource/80-NB295-11_REV_C_Qualcomm_Snapdragon_Mobile_Platform_Opencl_General_Programming_and_Optimization.pdf)

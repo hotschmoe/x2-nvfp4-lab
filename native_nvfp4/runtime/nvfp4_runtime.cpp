@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <limits>
@@ -62,6 +63,22 @@ std::string read_file(const char * path) {
         throw std::runtime_error(std::string("cannot read kernel source: ") + path);
     }
     return contents.str();
+}
+
+bool environment_enabled(const char * name) {
+#if defined(_WIN32)
+    char * value = nullptr;
+    size_t size = 0;
+    if (_dupenv_s(&value, &size, name) != 0 || !value) {
+        return true;
+    }
+    const bool enabled = std::strcmp(value, "0") != 0;
+    std::free(value);
+    return enabled;
+#else
+    const char * value = std::getenv(name);
+    return !value || std::strcmp(value, "0") != 0;
+#endif
 }
 
 std::string platform_string(cl_platform_id platform, cl_platform_info key) {
@@ -222,6 +239,7 @@ struct nvfp4_runtime {
     std::vector<pending_profile_event> pending_profile_events;
     std::vector<nvfp4_trace_event> last_trace_events;
     bool trace_enabled = false;
+    bool shape_tuning_enabled = true;
     std::string trace_scope;
     std::string device_name;
     mutable std::mutex queue_mutex;
@@ -655,6 +673,27 @@ cl_mem create_buffer(
     return buffer;
 }
 
+void enqueue_nvfp4_lab_linear(
+    nvfp4_runtime * runtime,
+    const nvfp4_matrix * matrix,
+    cl_mem input,
+    cl_mem output,
+    int row_tile,
+    int k_tile,
+    int decode_kind,
+    cl_event * event);
+
+void enqueue_nvfp4_lab_gemm(
+    nvfp4_runtime * runtime,
+    const nvfp4_matrix * matrix,
+    cl_mem input,
+    int vectors,
+    cl_mem output,
+    int vector_tile,
+    int k_tile,
+    int implementation_kind,
+    cl_event * event);
+
 void enqueue_nvfp4_linear(
     nvfp4_runtime * runtime,
     const nvfp4_matrix * matrix,
@@ -667,6 +706,50 @@ void enqueue_nvfp4_linear(
     const bool is_subgroup = kernel_kind == NVFP4_KERNEL_SUBGROUP;
     const bool is_tiled = kernel_kind == NVFP4_KERNEL_TILED;
     const bool is_row_tiled = kernel_kind == NVFP4_KERNEL_ROW_TILED;
+
+    if (runtime->shape_tuning_enabled && is_gemv &&
+        (is_subgroup || is_row_tiled)) {
+        int row_tile = 0;
+        int k_tile = 0;
+        if ((matrix->rows == 17408 && matrix->cols == 5120) ||
+            (matrix->rows == 5120 && matrix->cols == 17408)) {
+            row_tile = 16;
+            k_tile = 8192;
+        } else if (matrix->rows == 248320 && matrix->cols == 2048) {
+            row_tile = 8;
+            k_tile = 2048;
+        } else if (matrix->rows == 512 && matrix->cols == 2048) {
+            row_tile = 16;
+            k_tile = 2048;
+        } else if (matrix->rows == 2048 && matrix->cols == 512) {
+            row_tile = 4;
+            k_tile = 512;
+        }
+        if (row_tile != 0) {
+            enqueue_nvfp4_lab_linear(runtime, matrix, input, output,
+                                      row_tile, k_tile, 0, event);
+            return;
+        }
+    }
+
+    if (runtime->shape_tuning_enabled && !is_gemv && is_tiled) {
+        int vector_tile = 0;
+        if ((matrix->rows == 17408 && matrix->cols == 5120) ||
+            (matrix->rows == 5120 && matrix->cols == 17408)) {
+            vector_tile = vectors >= 16 ? 16 : 1;
+            while (vector_tile < vectors) vector_tile *= 2;
+        } else if (matrix->rows == 512 && matrix->cols == 2048) {
+            vector_tile = 1;
+        } else if (matrix->rows == 2048 && matrix->cols == 512) {
+            vector_tile = vectors <= 2 ? 4 : (vectors <= 4 ? 8 : 0);
+        }
+        if (vector_tile != 0) {
+            enqueue_nvfp4_lab_gemm(runtime, matrix, input, vectors, output,
+                                    vector_tile, matrix->cols, 3, event);
+            return;
+        }
+    }
+
     cl_kernel kernel = is_row_tiled
         ? runtime->gemv_rows_tiled
         : (is_tiled
@@ -973,6 +1056,8 @@ extern "C" NVFP4_API nvfp4_status nvfp4_runtime_create(
         holder->platform = platform;
         holder->device = device;
         holder->device_name = device_string(device, CL_DEVICE_NAME);
+        holder->shape_tuning_enabled = environment_enabled(
+            "VLLM_NVFP4_OPENCL_SHAPE_TUNING");
         cl_int status = CL_SUCCESS;
         holder->context = clCreateContext(nullptr, 1, &device, nullptr, nullptr, &status);
         check_cl(status, "clCreateContext");

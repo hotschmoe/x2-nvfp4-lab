@@ -1,0 +1,231 @@
+{
+  "campaign": "bandwidth-first",
+  "schema_version": 1,
+  "timestamp": "2026-08-23T06:12:11+00:00",
+  "hardware": {
+    "system_model": "ASUS Zenbook A16 UX3607OA",
+    "gpu": "Qualcomm(R) Adreno(TM) X2-90 GPU"
+  },
+  "software": {
+    "command": [
+      "native_nvfp4/bench_dense_full_model.py",
+      "--gates",
+      "64",
+      "--max-tokens",
+      "32768",
+      "--kv-dtype",
+      "bf16",
+      "--warmups",
+      "1",
+      "--samples",
+      "5",
+      "--generate-tokens",
+      "32"
+    ]
+  },
+  "environment": {
+    "power_source": "AC",
+    "battery_percent": 100,
+    "thermal_regime": "warm-burst",
+    "shape_tuning_enabled": true
+  },
+  "workload": {
+    "operation": "dense_qwen_full_text_registry_and_token",
+    "layers_loaded": 64,
+    "gate_layer_counts": [
+      64
+    ],
+    "max_tokens": 32768,
+    "kv_dtype": "bf16",
+    "lazy_embedding_rows_touched": 40,
+    "optional_vision_loaded": false,
+    "optional_mtp_loaded": false,
+    "nvfp4_mlp_layers": 56,
+    "fp8_mlp_layers": 8
+  },
+  "loading": {
+    "load_and_validate_seconds": 16.284376900061034,
+    "total_load_benchmark_and_teardown_seconds": 74.09238250006456,
+    "resident_checkpoint_native_payload_bytes": 19103683968,
+    "complete_text_compute_payload_bytes": 19103683968
+  },
+  "memory": {
+    "baseline_available_physical_bytes": 39213199360,
+    "before_release_available_physical_bytes": 17324494848,
+    "after_release_available_physical_bytes": 39000612864,
+    "recovered_on_release_bytes": 21676118016,
+    "reported_opencl_global_budget_bytes": 25563234304
+  },
+  "gates": [
+    {
+      "layers_resident": 64,
+      "last_layer": 63,
+      "checkpoint_native_payload_bytes": 19103683968,
+      "available_physical_bytes": 17475665920,
+      "available_delta_bytes": -21737533440,
+      "last_layer_composition_maximum_absolute_error": 0.0,
+      "last_layer_mlp_format": "fp8"
+    }
+  ],
+  "full_token": {
+    "input_token_id": 248044,
+    "greedy_output_token_id": 17,
+    "queued_kernel_ms": {
+      "median": 430.3464,
+      "p10": 429.57928000000004,
+      "p90": 435.21134000000006,
+      "minimum": 429.1616,
+      "maximum": 437.7123
+    },
+    "queued_wall_ms": {
+      "median": 436.0338,
+      "p10": 434.97378000000003,
+      "p90": 441.23234,
+      "minimum": 434.4703,
+      "maximum": 444.1911
+    },
+    "wall_tokens_per_second": 2.2934001905356878,
+    "first_queued_kernel_ms": 431.7035,
+    "first_queued_wall_ms": 437.7029,
+    "layer_synchronized_kernel_ms": 413.5876,
+    "layer_synchronized_wall_ms": 456.9525,
+    "maximum_absolute_error_vs_layer_synchronized_oracle": 0.0,
+    "finite_logits": true
+  },
+  "generation": {
+    "prompt": "Write a Python function add(a, b) with type hints. Return only code.",
+    "rendered_prompt": "<|im_start|>user\nWrite a Python function add(a, b) with type hints. Return only code.<|im_end|>\n<|im_start|>assistant\n<think>\n",
+    "prompt_token_ids": [
+      248045,
+      846,
+      198,
+      7734,
+      264,
+      12654,
+      709,
+      884,
+      2784,
+      11,
+      292,
+      8,
+      440,
+      913,
+      29642,
+      13,
+      3301,
+      1132,
+      1970,
+      13,
+      248046,
+      198,
+      248045,
+      74455,
+      198,
+      248068,
+      198
+    ],
+    "prompt_tokens": 27,
+    "maximum_tokens_requested": 32,
+    "generated_token_ids": [
+      760,
+      1156,
+      6587,
+      264,
+      4145,
+      12654,
+      709,
+      440,
+      913,
+      29642,
+      421,
+      11039,
+      1330,
+      4947,
+      13,
+      2302,
+      1318,
+      1132,
+      1970,
+      5743,
+      11,
+      874,
+      15673,
+      13,
+      198,
+      248069,
+      271,
+      71093,
+      12305,
+      198,
+      727,
+      884
+    ],
+    "generated_text": "The user wants a simple Python function with type hints that adds two numbers. They want only code returned, no explanation.\n</think>\n\n```python\ndef add",
+    "tokens_generated": 32,
+    "positions_processed": 58,
+    "stop_token_ids": [
+      248044,
+      248046
+    ],
+    "finish_reason": "length",
+    "finish_token_id": null,
+    "prefill_kernel_ms_per_token": {
+      "median": 406.3244,
+      "p10": 404.54246,
+      "p90": 424.96546,
+      "minimum": 403.9167,
+      "maximum": 451.5969
+    },
+    "prefill_end_to_end_ms": 11362.0682,
+    "prefill_tokens_per_second": 2.3763279294521396,
+    "time_to_first_token_ms": 11362.3303,
+    "decode_steps": 31,
+    "decode_kernel_ms_per_token": {
+      "median": 431.7089,
+      "p10": 430.3748,
+      "p90": 446.4524,
+      "minimum": 429.8335,
+      "maximum": 458.6476
+    },
+    "decode_end_to_end_wall_ms_per_token": {
+      "median": 443.96,
+      "p10": 438.8471,
+      "p90": 456.9417,
+      "minimum": 437.9948,
+      "maximum": 473.1454
+    },
+    "decode_end_to_end_tokens_per_second": 2.2434133600852415,
+    "layer_synchronized_prefill_kernel_ms_per_token": {
+      "median": 390.631,
+      "p10": 389.99206,
+      "p90": 392.21502,
+      "minimum": 389.6478,
+      "maximum": 428.8191
+    },
+    "layer_synchronized_decode_kernel_ms_per_token": {
+      "median": 416.2133,
+      "p10": 415.3904,
+      "p90": 436.1212,
+      "minimum": 414.3373,
+      "maximum": 445.7872
+    },
+    "maximum_absolute_error_vs_layer_synchronized_oracle": 0.0,
+    "token_sequence_matches_oracle": true
+  },
+  "correctness": {
+    "passed": true,
+    "gates_validated": 1,
+    "maximum_gate_layer_error": 0.0,
+    "complete_text_payload_accounted": true,
+    "full_token_executed": true,
+    "stateful_generation_executed": true,
+    "explicit_completion_marker": true
+  },
+  "limitations": [
+    "one request; multi-request scheduling and sustained thermal behavior are not measured",
+    "prefill is sequential batch-one execution rather than shared-weight GEMM",
+    "greedy argmax is performed after downloading full logits",
+    "available physical memory is system-wide, not an OpenCL allocator counter",
+    "vision and MTP tensors are intentionally excluded from the coding endpoint"
+  ]
+}

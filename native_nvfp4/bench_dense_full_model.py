@@ -849,7 +849,13 @@ def main() -> int:
                 "gpu": runtime.device_name,
             },
             "software": {"command": sys.argv},
-            "environment": {**power_status(), "thermal_regime": "warm-burst"},
+            "environment": {
+                **power_status(),
+                "thermal_regime": "warm-burst",
+                "shape_tuning_enabled": (
+                    os.environ.get("VLLM_NVFP4_OPENCL_SHAPE_TUNING", "1") != "0"
+                ),
+            },
             "workload": {
                 "operation": "dense_qwen_full_text_registry_and_token",
                 "layers_loaded": gates[-1],
