@@ -12,7 +12,8 @@ budget-qualified token step:
 
 1. build the complete 40-layer matrix/state registry under the measured OpenCL
    and Windows headroom policy;
-2. add final norm, LM head, sampling, and tokenizer-facing request plumbing;
+2. compose the proven final norm/LM head with all layers, then add sampling and
+   tokenizer-facing request plumbing;
 3. qualify full-checkpoint residency or select a measured expert-cache policy;
 4. preserve the one-queue device cadence through the existing vLLM adapter;
 5. then compare vLLM, SGLang, and Atlas control-plane behavior on the same native
@@ -550,9 +551,10 @@ The earlier crashes make benchmark containment part of the architecture:
 
 Prioritized next questions, including work not yet performed:
 
-1. **Complete 40-layer token boundary.** Build the full matrix/state registry,
-   add final norm, tensor-scaled FP8 LM head, sampling, and measure a real
-   checkpoint token before promoting any ten-cadence projection.
+1. **Complete 40-layer token boundary.** The native 248,320-row NVFP4 LM head
+   now passes independently. Build the full matrix/state registry, compose the
+   head, add sampling, and measure a real checkpoint token before promoting any
+   ten-cadence projection.
 2. **Further MoE fusion.** Device-resident 256-way top-8 and contiguous-bank
    dispatch now pass. Next compare fused gate/up, SiLU/down, shared-slot, and
    weighted-reduction variants, and expose per-kernel component timing.

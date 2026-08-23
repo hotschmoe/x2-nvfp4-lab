@@ -1,0 +1,73 @@
+{
+  "campaign": "bandwidth-first",
+  "schema_version": 1,
+  "timestamp": "2026-08-23T04:16:04+00:00",
+  "hardware": {
+    "system_model": "ASUS Zenbook A16 UX3607OA",
+    "gpu": "Qualcomm(R) Adreno(TM) X2-90 GPU"
+  },
+  "software": {
+    "command": [
+      "native_nvfp4/probe_moe_lm_head.py",
+      "--warmups",
+      "3",
+      "--samples",
+      "20"
+    ]
+  },
+  "environment": {
+    "power_source": "AC",
+    "battery_percent": 100,
+    "thermal_regime": "warm-burst"
+  },
+  "workload": {
+    "operation": "ornith_final_norm_nvfp4_lm_head",
+    "hidden_size": 2048,
+    "vocabulary_size": 248320,
+    "packed_shape": [
+      248320,
+      1024
+    ],
+    "scale_shape": [
+      248320,
+      128
+    ],
+    "native_payload_bytes": 286064640,
+    "checkpoint_global_divisor": 8995.136834390638
+  },
+  "timing": {
+    "warmups": 3,
+    "samples": 20,
+    "kernel_ms": {
+      "median": 9.145,
+      "p10": 9.139230000000001,
+      "p90": 9.221599999999999,
+      "minimum": 9.1298,
+      "maximum": 9.5398
+    },
+    "wall_ms": {
+      "median": 11.053650000000001,
+      "p10": 10.729930000000001,
+      "p90": 11.58245,
+      "minimum": 10.6126,
+      "maximum": 11.7034
+    },
+    "independent_cpu_oracle_seconds": 1.9251795000163838
+  },
+  "memory": {
+    "available_before_bytes": 38720172032,
+    "available_after_bytes": 38380617728
+  },
+  "correctness": {
+    "passed": true,
+    "maximum_absolute_error": 2.86102294921875e-06,
+    "expected_argmax_token": 169213,
+    "actual_argmax_token": 169213,
+    "finite_outputs": true,
+    "explicit_completion_marker": true
+  },
+  "limitations": [
+    "synthetic hidden state rather than a complete 40-layer output",
+    "greedy argmax is performed on the downloaded logits"
+  ]
+}

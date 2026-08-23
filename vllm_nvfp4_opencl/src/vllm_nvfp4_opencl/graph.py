@@ -593,6 +593,103 @@ class ResidentNvFp4Mlp:
             self.close()
 
 
+class ResidentNvFp4LmHead:
+    """Final RMSNorm plus checkpoint-native NVFP4 vocabulary projection.
+
+    The registry owns the immutable LM-head matrix. This graph owns only the
+    effective norm weight and reusable hidden/logit buffers, matching the
+    weight/state lifetime split used by the decoder fragments.
+    """
+
+    def __init__(
+        self,
+        runtime: Runtime,
+        norm_weight: np.ndarray,
+        lm_head: NativeMatrix,
+        epsilon: float = 1e-6,
+    ):
+        if (
+            norm_weight.ndim != 1
+            or norm_weight.dtype != np.float32
+            or not norm_weight.flags.c_contiguous
+        ):
+            raise ValueError("norm_weight must be contiguous float32 [hidden]")
+        if lm_head.cols != norm_weight.size:
+            raise ValueError("LM head input width must match final norm")
+        if epsilon < 0:
+            raise ValueError("epsilon must be nonnegative")
+        self.runtime = runtime
+        self.lm_head = lm_head
+        self.hidden_size = norm_weight.size
+        self.vocab_size = lm_head.rows
+        self.epsilon = epsilon
+        self._closed = False
+        self.norm_weight = runtime.upload_buffer(
+            np.ascontiguousarray(norm_weight + np.float32(1.0))
+        )
+        self.normalized = runtime.create_buffer(
+            self.hidden_size * np.dtype(np.float32).itemsize
+        )
+        self.logits = runtime.create_buffer(
+            self.vocab_size * np.dtype(np.float32).itemsize
+        )
+
+    def enqueue(self, hidden: DeviceBuffer) -> DeviceBuffer:
+        if self._closed:
+            raise RuntimeError("resident LM head is closed")
+        hidden_bytes = self.hidden_size * np.dtype(np.float32).itemsize
+        if hidden.bytes < hidden_bytes:
+            raise ValueError("hidden buffer is smaller than final norm width")
+        self.runtime.rmsnorm_device(
+            hidden,
+            self.norm_weight,
+            1,
+            self.hidden_size,
+            self.epsilon,
+            self.normalized,
+        )
+        return self.runtime.linear_device(
+            self.lm_head,
+            self.normalized,
+            1,
+            out=self.logits,
+            enqueue=True,
+        )
+
+    def execute(self, hidden: np.ndarray) -> tuple[np.ndarray, Profile]:
+        if (
+            hidden.shape != (1, self.hidden_size)
+            or hidden.dtype != np.float32
+            or not hidden.flags.c_contiguous
+        ):
+            raise ValueError("hidden must be contiguous float32 [1, hidden]")
+        source = self.runtime.upload_buffer(hidden)
+        try:
+            self.enqueue(source)
+            profile = self.runtime.synchronize()
+            return self.logits.download((1, self.vocab_size)), profile
+        finally:
+            source.close()
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self.logits.close()
+        self.normalized.close()
+        self.norm_weight.close()
+        self._closed = True
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        self.close()
+
+    def __del__(self) -> None:
+        if hasattr(self, "_closed"):
+            self.close()
+
+
 class ResidentBatchedNvFp4Mlp:
     """Multi-request RMSNorm + NVFP4 MLP using shared-weight GEMM kernels."""
 
@@ -794,6 +891,7 @@ class ResidentQwen35DecodeCadence:
 
 __all__ = [
     "ResidentBatchedNvFp4Mlp",
+    "ResidentNvFp4LmHead",
     "ResidentNvFp4Mlp",
     "ResidentQwen35DecodeCadence",
     "ResidentQwen35FullAttention",

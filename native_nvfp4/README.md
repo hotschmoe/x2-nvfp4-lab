@@ -106,6 +106,9 @@ scripts/run-isolated.ps1 -Executable $python -TimeoutSeconds 300 `
 scripts/run-isolated.ps1 -Executable $python -TimeoutSeconds 300 `
   -CompletionMarker 'MOE_CADENCE_PASS' `
   -CommandLine '-3 native_nvfp4/bench_moe_cadence.py --first-layer 0 --warmups 5 --samples 30'
+scripts/run-isolated.ps1 -Executable $python -TimeoutSeconds 300 `
+  -CompletionMarker 'MOE_LM_HEAD_PASS' `
+  -CommandLine '-3 native_nvfp4/probe_moe_lm_head.py --warmups 3 --samples 20'
 
 # Exact sparse layer: BF16 route, shared expert, top-8 NVFP4 experts, reduction
 scripts/run-isolated.ps1 -Executable $python -TimeoutSeconds 180 `

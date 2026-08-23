@@ -550,3 +550,23 @@ Canonical artifacts:
 
 - `20260822-210348-345022-moe-linear-full-layer.json`
 - `20260822-210541-006599-moe-cadence.json`
+
+## Exact 35B MoE final norm and LM head
+
+Ornith's vocabulary projection is checkpoint-native NVFP4 rather than FP8:
+248,320 rows by 2,048 columns, stored as a 248,320x1,024 packed-U8 matrix plus a
+248,320x128 E4M3 block-scale matrix and one FP32 global multiplier. The native
+payload is 286,064,640 bytes and is uploaded without expansion.
+
+The complete final RMSNorm and vocabulary projection matches an independent,
+chunked CPU E2M1/E4M3 decoder within `2.86e-6`; all 248,320 logits are compared
+and the greedy argmax token agrees exactly.
+
+| Operation | Median kernel | Median wall | Independent oracle | Max abs | Argmax token |
+|---|---:|---:|---:|---:|---:|
+| Final RMSNorm + full NVFP4 LM head | 9.1450 ms | 11.0537 ms | 1.197 s | `2.86e-6` | 169,213 |
+
+This isolates a synthetic hidden state. It proves the final arithmetic and full
+vocabulary allocation, but not yet a 40-layer checkpoint token or sampling
+policy. Canonical artifact:
+`20260823-041604-638698-moe-lm-head.json`.

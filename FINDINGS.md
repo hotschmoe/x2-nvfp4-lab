@@ -278,6 +278,13 @@ Ten measured four-layer kernels arithmetically project to 64.166 ms, or about
 LM head, sampling, the complete 40-layer registry, full-checkpoint memory
 pressure, and serving-control overhead remain open.
 
+The remaining projection format is now closed independently. Ornith's final
+248,320x2,048 LM head is native NVFP4 with 286,064,640 bytes of packed weights
+and block scales. Final RMSNorm plus all vocabulary logits measures 9.1450 ms
+kernel / 11.0537 ms wall, matches an independent chunked CPU decoder within
+`2.86e-6`, and returns the same argmax. The open boundary is composition with
+the complete 40-layer registry, not LM-head arithmetic.
+
 ## First decoder benchmarks
 
 Direct row-scaled FP8 kernels now accompany NVFP4 in the persistent runtime. A
