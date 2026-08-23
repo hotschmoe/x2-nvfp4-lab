@@ -77,10 +77,12 @@ scripts/run-isolated.ps1 -Executable $python -TimeoutSeconds 300 `
 # Paged KV/block tables, continuous batches, and vLLM request lifecycle
 scripts/run-isolated.ps1 -Executable $python `
   -CommandLine '-3 native_nvfp4/probe_paged_attention.py'
+scripts/run-isolated.ps1 -Executable $python `
+  -CommandLine '-3 native_nvfp4/probe_paged_attention.py --kv-dtype bf16'
 scripts/run-isolated.ps1 -Executable $python -TimeoutSeconds 300 `
-  -CommandLine '-3 native_nvfp4/bench_paged_scheduler.py --tokens 18 --requests 4'
+  -CommandLine '-3 native_nvfp4/bench_paged_scheduler.py --tokens 18 --requests 4 --kv-dtype bf16'
 scripts/run-isolated.ps1 -Executable $python -TimeoutSeconds 300 `
-  -CommandLine '-3 native_nvfp4/probe_vllm_cadence_adapter.py'
+  -CommandLine '-3 native_nvfp4/probe_vllm_cadence_adapter.py --kv-dtype bf16'
 
 # Real Qwen3.5 four-layer cadence: 3 linear-attention + 1 full-attention
 scripts/run-isolated.ps1 -Executable $python -TimeoutSeconds 300 `

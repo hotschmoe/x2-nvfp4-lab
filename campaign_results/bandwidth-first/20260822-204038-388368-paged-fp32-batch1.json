@@ -1,0 +1,44 @@
+{
+  "campaign": "bandwidth-first",
+  "schema_version": 1,
+  "timestamp": "2026-08-22T20:40:38-07:00",
+  "hardware": {
+    "system_model": "ASUS Zenbook A16 UX3607OA",
+    "gpu": "Qualcomm(R) Adreno(TM) X2-90 GPU"
+  },
+  "environment": {
+    "power_source": "AC",
+    "battery_percent": 100,
+    "thermal_regime": "warm-burst"
+  },
+  "workload": {
+    "operation": "qwen35_four_layer_paged_decode",
+    "kv_dtype": "fp32",
+    "requests": 1,
+    "tokens_per_request": 18,
+    "page_tokens": 16,
+    "pages": 2,
+    "pool_storage_bytes_one_full_attention_layer": 262144,
+    "projected_pool_bytes_16_full_attention_layers": 4194304
+  },
+  "timing": {
+    "scheduler_only_kernel_ms_per_step": 30.483766666666668,
+    "scheduler_only_wall_ms_per_step": 33.12182777638858,
+    "wall_with_fp32_oracle_ms_per_step": 66.24546666474392
+  },
+  "correctness": {
+    "passed": true,
+    "oracle_kv_dtype": "fp32",
+    "maximum_absolute_error": 0.0,
+    "maximum_reference_magnitude": 143.0686492919922,
+    "mean_absolute_error": 0.0,
+    "relative_rmse": 0.0,
+    "finite_outputs": true,
+    "explicit_completion_marker": true
+  },
+  "limitations": [
+    "four-layer cadence contains one of the dense model's sixteen full-attention layers",
+    "18 synthetic decode tokens are a numerical and page-boundary gate, not a long-context quality evaluation",
+    "full-model pool bytes are an exact shape projection, not a successful full-model allocation"
+  ]
+}

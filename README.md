@@ -25,6 +25,8 @@ Current highlights on an Adreno X2-90:
 - Metadata-exact memory plans cover every tensor in both checkpoints. The first
   coding-service policy omits vision/MTP, keeps embedding lookup lazy on CPU,
   and retains a 2 GiB OpenCL safety reserve.
+- Opt-in BF16 paged KV halves cache storage for the dense model with unchanged
+  four-layer cadence and `5.64e-5` relative RMSE versus FP32 at batch four.
 - Independent CPU/GPU tensor oracles and isolated-process accelerator gates.
 
 Start with [CAMPAIGN_BANDWIDTH_FIRST.md](CAMPAIGN_BANDWIDTH_FIRST.md) and

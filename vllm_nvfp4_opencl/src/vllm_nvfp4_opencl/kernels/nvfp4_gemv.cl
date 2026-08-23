@@ -43,6 +43,12 @@ static inline float bf16_to_fp32(ushort x) {
     return as_float((uint)x << 16);
 }
 
+static inline ushort fp32_to_bf16_rne(float x) {
+    uint bits = as_uint(x);
+    const uint round_bias = 0x7FFFu + ((bits >> 16) & 1u);
+    return (ushort)((bits + round_bias) >> 16);
+}
+
 static inline float nvfp4_native_dot(
     global const uchar * packed,
     global const uchar * scales,
@@ -934,6 +940,90 @@ kernel void qwen35_full_attention_prepare_decode_f32(
     }
 }
 
+// Dense-Qwen paged-cache preparation with round-to-nearest-even BF16 K/V
+// storage. Query/gate and all attention arithmetic remain FP32.
+__attribute__((reqd_work_group_size(NVFP4_SUBGROUP_WIDTH, 1, 1)))
+__attribute__((qcom_reqd_sub_group_size("half")))
+kernel void qwen35_full_attention_prepare_decode_bf16_kv(
+    global const float * q_proj,
+    global const float * k_proj,
+    global const float * v_proj,
+    global const float * q_norm_weight,
+    global const float * k_norm_weight,
+    global const float * cos,
+    global const float * sin,
+    global ushort * k_cache,
+    global ushort * v_cache,
+    global float * q,
+    global float * gate,
+    uint position,
+    float epsilon
+) {
+    const uint head = get_group_id(0);
+    const uint lane = get_sub_group_local_id();
+    const uint q_base = head*QWEN35_FULL_QPROJ_STRIDE;
+    float q_sum = 0.0f;
+    for (uint col = lane; col < QWEN35_FULL_HEAD_DIM;
+         col += NVFP4_SUBGROUP_WIDTH) {
+        const float value = q_proj[q_base + col];
+        q_sum += value*value;
+    }
+    q_sum = sub_group_reduce_add(q_sum);
+    const float q_inverse_rms = rsqrt(
+        q_sum/(float)QWEN35_FULL_HEAD_DIM + epsilon);
+    for (uint col = lane; col < QWEN35_FULL_HEAD_DIM;
+         col += NVFP4_SUBGROUP_WIDTH) {
+        float value = q_proj[q_base + col]*q_inverse_rms*
+            (1.0f + q_norm_weight[col]);
+        if (col < QWEN35_FULL_ROTARY_DIM) {
+            const uint partner = col < QWEN35_FULL_ROTARY_DIM/2
+                ? col + QWEN35_FULL_ROTARY_DIM/2
+                : col - QWEN35_FULL_ROTARY_DIM/2;
+            const float partner_value = q_proj[q_base + partner]*q_inverse_rms*
+                (1.0f + q_norm_weight[partner]);
+            const float rotated = col < QWEN35_FULL_ROTARY_DIM/2
+                ? -partner_value : partner_value;
+            value = value*cos[col] + rotated*sin[col];
+        }
+        q[head*QWEN35_FULL_HEAD_DIM + col] = value;
+        gate[head*QWEN35_FULL_HEAD_DIM + col] =
+            q_proj[q_base + QWEN35_FULL_HEAD_DIM + col];
+    }
+
+    if (head < QWEN35_FULL_KV_HEADS) {
+        const uint source_base = head*QWEN35_FULL_HEAD_DIM;
+        const uint cache_base =
+            (position*QWEN35_FULL_KV_HEADS + head)*QWEN35_FULL_HEAD_DIM;
+        float k_sum = 0.0f;
+        for (uint col = lane; col < QWEN35_FULL_HEAD_DIM;
+             col += NVFP4_SUBGROUP_WIDTH) {
+            const float value = k_proj[source_base + col];
+            k_sum += value*value;
+        }
+        k_sum = sub_group_reduce_add(k_sum);
+        const float k_inverse_rms = rsqrt(
+            k_sum/(float)QWEN35_FULL_HEAD_DIM + epsilon);
+        for (uint col = lane; col < QWEN35_FULL_HEAD_DIM;
+             col += NVFP4_SUBGROUP_WIDTH) {
+            float value = k_proj[source_base + col]*k_inverse_rms*
+                (1.0f + k_norm_weight[col]);
+            if (col < QWEN35_FULL_ROTARY_DIM) {
+                const uint partner = col < QWEN35_FULL_ROTARY_DIM/2
+                    ? col + QWEN35_FULL_ROTARY_DIM/2
+                    : col - QWEN35_FULL_ROTARY_DIM/2;
+                const float partner_value = k_proj[source_base + partner]*
+                    k_inverse_rms*(1.0f + k_norm_weight[partner]);
+                const float rotated = col < QWEN35_FULL_ROTARY_DIM/2
+                    ? -partner_value : partner_value;
+                value = value*cos[col] + rotated*sin[col];
+            }
+            k_cache[cache_base + col] = fp32_to_bf16_rne(value);
+            v_cache[cache_base + col] =
+                fp32_to_bf16_rne(v_proj[source_base + col]);
+        }
+    }
+}
+
 __attribute__((reqd_work_group_size(NVFP4_SUBGROUP_WIDTH, 1, 1)))
 __attribute__((qcom_reqd_sub_group_size("half")))
 kernel void qwen35_full_attention_decode_f32(
@@ -1025,6 +1115,58 @@ kernel void qwen35_paged_full_attention_decode_f32(
             const uint col = lane + item*NVFP4_SUBGROUP_WIDTH;
             accumulator[item] = accumulator[item]*old_scale + token_scale*
                 v_pages[cache_base + col];
+        }
+        maximum = next_maximum;
+    }
+
+    for (uint item = 0; item < 4; ++item) {
+        const uint col = lane + item*NVFP4_SUBGROUP_WIDTH;
+        const float value = accumulator[item]/denominator;
+        const float gate_value = gate[q_base + col];
+        dst[q_base + col] = value/(1.0f + exp(-gate_value));
+    }
+}
+
+__attribute__((reqd_work_group_size(NVFP4_SUBGROUP_WIDTH, 1, 1)))
+__attribute__((qcom_reqd_sub_group_size("half")))
+kernel void qwen35_paged_full_attention_decode_bf16_kv(
+    global const float * q,
+    global const float * gate,
+    global const ushort * k_pages,
+    global const ushort * v_pages,
+    global const uint * block_table,
+    global float * dst,
+    uint tokens
+) {
+    const uint head = get_group_id(0);
+    const uint lane = get_sub_group_local_id();
+    const uint kv_head = head/(QWEN35_FULL_HEADS/QWEN35_FULL_KV_HEADS);
+    const uint q_base = head*QWEN35_FULL_HEAD_DIM;
+    const float attention_scale = 0.0625f;
+    float maximum = -INFINITY;
+    float denominator = 0.0f;
+    float accumulator[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+
+    for (uint token = 0; token < tokens; ++token) {
+        const uint page = block_table[token >> 4];
+        const uint physical_token = (page << 4) + (token & 15u);
+        const uint cache_base =
+            (physical_token*QWEN35_FULL_KV_HEADS + kv_head)*
+            QWEN35_FULL_HEAD_DIM;
+        float partial = 0.0f;
+        for (uint col = lane; col < QWEN35_FULL_HEAD_DIM;
+             col += NVFP4_SUBGROUP_WIDTH) {
+            partial += q[q_base + col]*bf16_to_fp32(k_pages[cache_base + col]);
+        }
+        const float score = sub_group_reduce_add(partial)*attention_scale;
+        const float next_maximum = fmax(maximum, score);
+        const float old_scale = exp(maximum - next_maximum);
+        const float token_scale = exp(score - next_maximum);
+        denominator = denominator*old_scale + token_scale;
+        for (uint item = 0; item < 4; ++item) {
+            const uint col = lane + item*NVFP4_SUBGROUP_WIDTH;
+            accumulator[item] = accumulator[item]*old_scale + token_scale*
+                bf16_to_fp32(v_pages[cache_base + col]);
         }
         maximum = next_maximum;
     }

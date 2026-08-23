@@ -171,11 +171,14 @@ class Qwen35CadenceWeights:
         return Qwen35CadenceSession(self, max_tokens)
 
     def create_paged_scheduler(
-        self, max_pages: int, max_batch_size: int = 4
+        self,
+        max_pages: int,
+        max_batch_size: int = 4,
+        kv_dtype: str = "fp32",
     ) -> Qwen35PagedScheduler:
         if self._closed:
             raise RuntimeError("cadence weights are closed")
-        return Qwen35PagedScheduler(self, max_pages, max_batch_size)
+        return Qwen35PagedScheduler(self, max_pages, max_batch_size, kv_dtype)
 
     def close(self) -> None:
         if self._closed:
@@ -340,12 +343,15 @@ class Qwen35PagedScheduler:
         weights: Qwen35CadenceWeights,
         max_pages: int,
         max_batch_size: int,
+        kv_dtype: str = "fp32",
     ):
         if max_batch_size <= 0:
             raise ValueError("max_batch_size must be positive")
         self.weights = weights
         self.runtime = weights.runtime
-        self.pool = self.runtime.create_paged_attention_pool(max_pages)
+        self.pool = self.runtime.create_paged_attention_pool(
+            max_pages, kv_dtype=kv_dtype
+        )
         self.max_batch_size = max_batch_size
         self.sessions: dict[str, Qwen35CadenceSession] = {}
         self._closed = False

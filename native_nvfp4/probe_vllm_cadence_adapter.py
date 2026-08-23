@@ -21,6 +21,7 @@ def main() -> int:
         type=Path,
         default=here.parent / "models/Qwen3.8-27B-NVFP4-Unsloth/model.safetensors",
     )
+    parser.add_argument("--kv-dtype", choices=("fp32", "bf16"), default="fp32")
     args = parser.parse_args()
     os.environ["VLLM_NVFP4_OPENCL"] = "1"
     os.environ["VLLM_NVFP4_OPENCL_DLL"] = str(
@@ -37,7 +38,10 @@ def main() -> int:
     runtime = Runtime(*runtime_paths())
     weights = Qwen35CadenceWeights.load(runtime, args.model)
     adapter = VllmCadenceAdapter(
-        weights, max_pages=4, default_max_tokens=32
+        weights,
+        max_pages=4,
+        default_max_tokens=32,
+        kv_dtype=args.kv_dtype,
     )
     oracle = {
         request_id: weights.create_session(32) for request_id in ("a", "b")
@@ -62,7 +66,12 @@ def main() -> int:
         expected_tensor = torch.cat(expected)
         error = float(torch.max(torch.abs(output.float() - expected_tensor.float())))
         maximum_error = max(maximum_error, error)
-        if not torch.equal(output, expected_tensor):
+        if not torch.allclose(
+            output,
+            expected_tensor,
+            rtol=0 if args.kv_dtype == "fp32" else 1e-2,
+            atol=0 if args.kv_dtype == "fp32" else 1e-2,
+        ):
             raise SystemExit(f"initial adapter batch mismatch: {error:.9g}")
 
         second = batch()
@@ -75,7 +84,12 @@ def main() -> int:
                 torch.max(torch.abs(reordered[index].float() - expected_item[0].float()))
             )
             maximum_error = max(maximum_error, error)
-            if not torch.equal(reordered[index], expected_item[0]):
+            if not torch.allclose(
+                reordered[index],
+                expected_item[0],
+                rtol=0 if args.kv_dtype == "fp32" else 1e-2,
+                atol=0 if args.kv_dtype == "fp32" else 1e-2,
+            ):
                 raise SystemExit(f"reordered request mismatch: {request_id} {error:.9g}")
 
         single = batch()[:1]
@@ -119,11 +133,17 @@ def main() -> int:
             torch.max(torch.abs(chunk_output.float() - chunk_expected_tensor.float()))
         )
         maximum_error = max(maximum_error, chunk_error)
-        if not torch.equal(chunk_output, chunk_expected_tensor):
+        if not torch.allclose(
+            chunk_output,
+            chunk_expected_tensor,
+            rtol=0 if args.kv_dtype == "fp32" else 1e-2,
+            atol=0 if args.kv_dtype == "fp32" else 1e-2,
+        ):
             raise SystemExit(f"request-major prompt chunk mismatch: {chunk_error:.9g}")
         adapter.abort(["d", "e"])
         print(
             f"device={runtime.device_name} dtype={output.dtype} "
+            f"kv_dtype={args.kv_dtype} pool_storage_bytes={adapter.scheduler.pool.storage_bytes} "
             f"max_abs={maximum_error:.9g} pages_reclaimed=4"
         )
         print(

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Mapping, Sequence
 from typing import Any, Self
 
@@ -27,12 +28,18 @@ class VllmCadenceAdapter:
         max_pages: int,
         default_max_tokens: int,
         max_batch_size: int = 4,
+        kv_dtype: str | None = None,
     ):
         if default_max_tokens <= 0:
             raise ValueError("default_max_tokens must be positive")
         self.weights = weights
+        selected_kv_dtype = kv_dtype or os.environ.get(
+            "VLLM_NVFP4_OPENCL_KV_DTYPE", "fp32"
+        )
         self.scheduler = weights.create_paged_scheduler(
-            max_pages, max_batch_size=max_batch_size
+            max_pages,
+            max_batch_size=max_batch_size,
+            kv_dtype=selected_kv_dtype,
         )
         self.default_max_tokens = default_max_tokens
         self._closed = False

@@ -138,16 +138,31 @@ class FullAttentionState:
 
 
 class PagedAttentionPool:
-    def __init__(self, runtime: Runtime, handle: C.c_void_p, max_pages: int):
+    def __init__(
+        self,
+        runtime: Runtime,
+        handle: C.c_void_p,
+        max_pages: int,
+        kv_dtype: str,
+    ):
         self.runtime = runtime
         self.handle = handle
         self.max_pages = max_pages
+        self.kv_dtype = kv_dtype
 
     @property
     def free_pages(self) -> int:
         if not self.handle:
             return 0
         return int(self.runtime.lib.qwen35_paged_attention_pool_free_pages(self.handle))
+
+    @property
+    def storage_bytes(self) -> int:
+        if not self.handle:
+            return 0
+        return int(
+            self.runtime.lib.qwen35_paged_attention_pool_storage_bytes(self.handle)
+        )
 
     def close(self) -> None:
         if self.handle:
@@ -604,9 +619,18 @@ class Runtime:
             C.POINTER(C.c_void_p),
         ]
         self.lib.qwen35_paged_attention_pool_create.restype = C.c_int
+        self.lib.qwen35_paged_attention_pool_create_with_dtype.argtypes = [
+            C.c_void_p,
+            C.c_int,
+            C.c_int,
+            C.POINTER(C.c_void_p),
+        ]
+        self.lib.qwen35_paged_attention_pool_create_with_dtype.restype = C.c_int
         self.lib.qwen35_paged_attention_pool_destroy.argtypes = [C.c_void_p]
         self.lib.qwen35_paged_attention_pool_free_pages.argtypes = [C.c_void_p]
         self.lib.qwen35_paged_attention_pool_free_pages.restype = C.c_int
+        self.lib.qwen35_paged_attention_pool_storage_bytes.argtypes = [C.c_void_p]
+        self.lib.qwen35_paged_attention_pool_storage_bytes.restype = C.c_size_t
         self.lib.qwen35_paged_attention_state_create.argtypes = [
             C.c_void_p,
             C.c_int,
@@ -1363,17 +1387,22 @@ class Runtime:
         )
         return out
 
-    def create_paged_attention_pool(self, max_pages: int) -> PagedAttentionPool:
+    def create_paged_attention_pool(
+        self, max_pages: int, kv_dtype: str = "fp32"
+    ) -> PagedAttentionPool:
         if max_pages <= 0:
             raise ValueError("max_pages must be positive")
+        dtype_ids = {"fp32": 0, "bf16": 1}
+        if kv_dtype not in dtype_ids:
+            raise ValueError("kv_dtype must be 'fp32' or 'bf16'")
         handle = C.c_void_p()
         self._check(
-            self.lib.qwen35_paged_attention_pool_create(
-                self.handle, max_pages, C.byref(handle)
+            self.lib.qwen35_paged_attention_pool_create_with_dtype(
+                self.handle, max_pages, dtype_ids[kv_dtype], C.byref(handle)
             ),
-            "qwen35_paged_attention_pool_create",
+            "qwen35_paged_attention_pool_create_with_dtype",
         )
-        return PagedAttentionPool(self, handle, max_pages)
+        return PagedAttentionPool(self, handle, max_pages, kv_dtype)
 
     def create_paged_full_attention_state(
         self, pool: PagedAttentionPool, max_tokens: int

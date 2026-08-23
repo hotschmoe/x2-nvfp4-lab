@@ -415,10 +415,20 @@ NVFP4_API nvfp4_status qwen35_paged_attention_pool_create(
     int max_pages,
     qwen35_paged_attention_pool ** out_pool);
 
+// kv_dtype: 0 = FP32 (compatibility default), 1 = BF16.
+NVFP4_API nvfp4_status qwen35_paged_attention_pool_create_with_dtype(
+    nvfp4_runtime * runtime,
+    int max_pages,
+    int kv_dtype,
+    qwen35_paged_attention_pool ** out_pool);
+
 NVFP4_API void qwen35_paged_attention_pool_destroy(
     qwen35_paged_attention_pool * pool);
 
 NVFP4_API int qwen35_paged_attention_pool_free_pages(
+    const qwen35_paged_attention_pool * pool);
+
+NVFP4_API size_t qwen35_paged_attention_pool_storage_bytes(
     const qwen35_paged_attention_pool * pool);
 
 NVFP4_API nvfp4_status qwen35_paged_attention_state_create(

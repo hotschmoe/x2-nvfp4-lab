@@ -41,6 +41,10 @@ Set `VLLM_NVFP4_OPENCL_SVM=0` to force conventional copied buffers. Otherwise
 the runtime prefers shared SVM and falls back automatically if capability or
 allocation validation fails.
 
+The dense-Qwen paged serving seam keeps FP32 KV as the compatibility default.
+Set `VLLM_NVFP4_OPENCL_KV_DTYPE=bf16` (or pass `kv_dtype="bf16"` to
+`VllmCadenceAdapter`) to use the validated half-size BF16 cache.
+
 Current vLLM `main` needs the adjacent capability patch in this workspace so a
 registered out-of-tree kernel can advertise W4A16 support. Once that patch is
 upstream, the plugin does not need to modify vLLM's kernel registry.

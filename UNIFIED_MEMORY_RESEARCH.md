@@ -582,6 +582,9 @@ Prioritized next questions, including work not yet performed:
    and obtain Qualcomm compiler/occupancy/memory-counter evidence so the gap
    between 34.22 GB/s useful NVFP4 delivery and the 129 GB/s raw ceiling can be
    attributed rather than guessed.
+10. **KV precision and long-context quality.** Extend the BF16 cache to the MoE
+    16-head/two-KV-head shape, then compare FP32/BF16/FP8 perplexity and coding
+    task behavior at 32K/64K/128K with prefix reuse and concurrent requests.
 
 The immediate memory question is now sharper: one full expert bank is 454.75 MB
 and 40 banks are 16.94 GiB. The complete safetensors checkpoint is 21.81 GiB,
@@ -620,6 +623,12 @@ reserve and full residency has not passed. BF16 KV is the next target, enabling
 dense 32K with 1.860 GiB beyond the reserve and MoE 64K with 2.044 GiB. FP8 KV
 must pass an end-to-end long-context quality gate before it can unlock dense
 64K or higher concurrency.
+
+The dense BF16 storage path now passes its first implementation gate: exact
+half-size allocation, independent BF16 cache oracle, four-layer batch-one/four
+cadence, and vLLM lifecycle. It is opt-in pending a complete 64-layer 32K test.
+The MoE attention shape (16 query heads, two KV heads) still needs a parameterized
+or dedicated BF16 kernel before the 64K MoE planning cell can be exercised.
 
 This policy borrows MLX's useful lifetime principle rather than its API: keep
 locationless/lazy data such as embeddings from being eagerly materialized, and

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import os
 import sys
 from pathlib import Path
@@ -12,7 +13,16 @@ import numpy as np
 from probe_full_attention import apply_rope, rmsnorm
 
 
+def round_to_bf16(array: np.ndarray) -> np.ndarray:
+    bits = np.ascontiguousarray(array, dtype=np.float32).view(np.uint32)
+    rounded = bits + np.uint32(0x7FFF) + ((bits >> 16) & np.uint32(1))
+    return ((rounded >> 16) << 16).view(np.float32)
+
+
 def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--kv-dtype", choices=("fp32", "bf16"), default="fp32")
+    args = parser.parse_args()
     here = Path(__file__).resolve().parent
     os.environ["VLLM_NVFP4_OPENCL"] = "1"
     os.environ["VLLM_NVFP4_OPENCL_DLL"] = str(
@@ -26,7 +36,13 @@ def main() -> int:
 
     rng = np.random.default_rng(20260822)
     runtime = Runtime(*runtime_paths())
-    pool = runtime.create_paged_attention_pool(4)
+    pool = runtime.create_paged_attention_pool(4, kv_dtype=args.kv_dtype)
+    element_bytes = 2 if args.kv_dtype == "bf16" else 4
+    expected_storage = 4 * 16 * 4 * 256 * element_bytes * 2
+    if pool.storage_bytes != expected_storage:
+        raise SystemExit(
+            f"pool storage mismatch: {pool.storage_bytes} != {expected_storage}"
+        )
     states = [runtime.create_paged_full_attention_state(pool, 32) for _ in range(2)]
     q_weight = np.ascontiguousarray(rng.normal(0, 0.1, 256).astype(np.float32))
     k_weight = np.ascontiguousarray(rng.normal(0, 0.1, 256).astype(np.float32))
@@ -80,6 +96,9 @@ def main() -> int:
                 )
                 gate = q_projected[:, 256:]
                 key = apply_rope(rmsnorm(k_projected, k_weight), cos, sin)
+                if args.kv_dtype == "bf16":
+                    key = round_to_bf16(key)
+                    v_projected = round_to_bf16(v_projected)
                 references[request][0].append(key)
                 references[request][1].append(v_projected)
                 cached_k = np.stack(references[request][0])
@@ -117,10 +136,11 @@ def main() -> int:
         if pool.free_pages != 4:
             raise SystemExit("page pool did not fully recover")
         print(
-            f"device={runtime.device_name} requests=2 tokens_each=18 "
+            f"device={runtime.device_name} kv_dtype={args.kv_dtype} "
+            f"storage_bytes={pool.storage_bytes} requests=2 tokens_each=18 "
             f"pages=4 page_tokens=16 max_abs={maximum_error:.9g}"
         )
-        print("PASS: interleaved block tables and page reclamation are exact")
+        print("PASS: interleaved block tables, KV dtype, and reclamation are exact")
         return 0
     finally:
         for state in reversed(states):

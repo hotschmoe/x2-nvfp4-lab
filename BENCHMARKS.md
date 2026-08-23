@@ -429,3 +429,35 @@ concurrency.
 
 Canonical artifact:
 `campaign_results/bandwidth-first/checkpoint-memory-inventory.json`.
+
+## Dense BF16 paged KV gate
+
+The dense Qwen paged-attention pool now accepts `fp32` or `bf16`. BF16 K/V is
+rounded to nearest-even on device; query/gate storage, softmax, and value
+accumulation remain FP32. Four pages occupy 262,144 bytes in BF16 versus 524,288
+bytes in FP32. Interleaved two-request decoding crossed the 16-token page
+boundary, matched a separately rounded BF16 cache oracle within `1.19e-7`, and
+returned every page on reset.
+
+The exact four-layer cadence (one full-attention layer) was then compared with
+its FP32-cache oracle over 18 tokens:
+
+| KV / batch | Pool bytes | Scheduler kernel/step | Wall/step | Max abs vs FP32 | Relative RMSE |
+|---|---:|---:|---:|---:|---:|
+| FP32 / 1 | 262,144 | 30.484 ms | 33.122 ms | 0 | 0 |
+| BF16 / 1 | 131,072 | 30.428 ms | 33.055 ms | `0.00257` | `4.08e-5` |
+| FP32 / 4 | 1,048,576 | 102.037 ms | 110.112 ms | 0 | 0 |
+| BF16 / 4 | 524,288 | 102.266 ms | 111.346 ms | `0.00642` | `5.64e-5` |
+
+This warm-burst gate shows a 2x capacity reduction with no meaningful cadence
+change. The vLLM adapter also passes request reorder, request-major prompt
+chunks, abort, and full page reclamation using BF16 KV. A dense 32K allocation
+projects from exactly 4 GiB to 2 GiB across all 16 full-attention layers, but the
+complete 64-layer model and long-context quality have not yet been tested.
+
+Canonical artifacts:
+
+- `20260822-204038-388368-paged-fp32-batch1.json`
+- `20260822-204046-722776-paged-fp32-batch4.json`
+- `20260822-204050-233641-paged-bf16-batch1.json`
+- `20260822-204058-576796-paged-bf16-batch4.json`

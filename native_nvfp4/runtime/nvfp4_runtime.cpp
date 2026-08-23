@@ -175,8 +175,10 @@ struct nvfp4_runtime {
     cl_kernel qwen35_prepare_gated_delta = nullptr;
     cl_kernel rmsnorm_silu_gate = nullptr;
     cl_kernel qwen35_full_attention_prepare = nullptr;
+    cl_kernel qwen35_full_attention_prepare_bf16_kv = nullptr;
     cl_kernel qwen35_full_attention_decode = nullptr;
     cl_kernel qwen35_paged_full_attention_decode = nullptr;
+    cl_kernel qwen35_paged_full_attention_decode_bf16_kv = nullptr;
     cl_kernel qwen35_gated_delta = nullptr;
     cl_kernel qwen35_causal_conv = nullptr;
     cl_program bandwidth_program = nullptr;
@@ -225,8 +227,14 @@ struct nvfp4_runtime {
         if (stream_read_u32) clReleaseKernel(stream_read_u32);
         if (stream_read_u8) clReleaseKernel(stream_read_u8);
         if (bandwidth_program) clReleaseProgram(bandwidth_program);
+        if (qwen35_paged_full_attention_decode_bf16_kv) {
+            clReleaseKernel(qwen35_paged_full_attention_decode_bf16_kv);
+        }
         if (qwen35_paged_full_attention_decode) clReleaseKernel(qwen35_paged_full_attention_decode);
         if (qwen35_full_attention_decode) clReleaseKernel(qwen35_full_attention_decode);
+        if (qwen35_full_attention_prepare_bf16_kv) {
+            clReleaseKernel(qwen35_full_attention_prepare_bf16_kv);
+        }
         if (qwen35_full_attention_prepare) clReleaseKernel(qwen35_full_attention_prepare);
         if (rmsnorm_silu_gate) clReleaseKernel(rmsnorm_silu_gate);
         if (qwen35_prepare_gated_delta) clReleaseKernel(qwen35_prepare_gated_delta);
@@ -414,6 +422,8 @@ struct qwen35_paged_attention_pool_data {
     cl_mem k_pages = nullptr;
     cl_mem v_pages = nullptr;
     int max_pages = 0;
+    int kv_dtype = 0;
+    size_t storage_bytes = 0;
     std::vector<cl_uint> free_pages;
     mutable std::mutex mutex;
 
@@ -849,10 +859,14 @@ extern "C" NVFP4_API nvfp4_status nvfp4_runtime_create(
         holder->rmsnorm_silu_gate = make_kernel("rmsnorm_silu_gate_f32");
         holder->qwen35_full_attention_prepare = make_kernel(
             "qwen35_full_attention_prepare_decode_f32");
+        holder->qwen35_full_attention_prepare_bf16_kv = make_kernel(
+            "qwen35_full_attention_prepare_decode_bf16_kv");
         holder->qwen35_full_attention_decode = make_kernel(
             "qwen35_full_attention_decode_f32");
         holder->qwen35_paged_full_attention_decode = make_kernel(
             "qwen35_paged_full_attention_decode_f32");
+        holder->qwen35_paged_full_attention_decode_bf16_kv = make_kernel(
+            "qwen35_paged_full_attention_decode_bf16_kv");
         holder->qwen35_gated_delta = make_kernel("qwen35_gated_delta_f32");
         holder->qwen35_causal_conv = make_kernel("qwen35_causal_conv4_silu_f32");
         g_last_error.clear();
@@ -2674,10 +2688,22 @@ extern "C" NVFP4_API nvfp4_status qwen35_paged_attention_pool_create(
     nvfp4_runtime * runtime,
     int max_pages,
     qwen35_paged_attention_pool ** out_pool) {
+    return qwen35_paged_attention_pool_create_with_dtype(
+        runtime, max_pages, 0, out_pool);
+}
+
+extern "C" NVFP4_API nvfp4_status qwen35_paged_attention_pool_create_with_dtype(
+    nvfp4_runtime * runtime,
+    int max_pages,
+    int kv_dtype,
+    qwen35_paged_attention_pool ** out_pool) {
     constexpr size_t page_elements = 16u*4u*256u;
-    if (!runtime || max_pages <= 0 || !out_pool ||
+    const size_t element_bytes =
+        kv_dtype == 0 ? sizeof(float) : sizeof(uint16_t);
+    if (!runtime || max_pages <= 0 || (kv_dtype != 0 && kv_dtype != 1) ||
+        !out_pool ||
         static_cast<size_t>(max_pages) >
-            std::numeric_limits<size_t>::max()/page_elements/sizeof(float)) {
+            std::numeric_limits<size_t>::max()/page_elements/element_bytes) {
         return fail_invalid("invalid paged-attention pool size");
     }
     *out_pool = nullptr;
@@ -2686,8 +2712,10 @@ extern "C" NVFP4_API nvfp4_status qwen35_paged_attention_pool_create(
         holder->data = std::make_shared<qwen35_paged_attention_pool_data>();
         holder->data->runtime = runtime;
         holder->data->max_pages = max_pages;
+        holder->data->kv_dtype = kv_dtype;
         const size_t bytes =
-            static_cast<size_t>(max_pages)*page_elements*sizeof(float);
+            static_cast<size_t>(max_pages)*page_elements*element_bytes;
+        holder->data->storage_bytes = 2*bytes;
         cl_int status = CL_SUCCESS;
         holder->data->k_pages = clCreateBuffer(runtime->context,
                                                CL_MEM_READ_WRITE,
@@ -2721,6 +2749,11 @@ extern "C" NVFP4_API int qwen35_paged_attention_pool_free_pages(
     if (!pool || !pool->data) return -1;
     std::lock_guard<std::mutex> lock(pool->data->mutex);
     return static_cast<int>(pool->data->free_pages.size());
+}
+
+extern "C" NVFP4_API size_t qwen35_paged_attention_pool_storage_bytes(
+    const qwen35_paged_attention_pool * pool) {
+    return pool && pool->data ? pool->data->storage_bytes : 0;
 }
 
 extern "C" NVFP4_API nvfp4_status qwen35_paged_attention_state_create(
@@ -2871,16 +2904,19 @@ qwen35_paged_full_attention_decode_device_enqueue_f32(
             cos->data, sin->data, state->pool->k_pages,
             state->pool->v_pages, state->q, state->gate,
         };
+        cl_kernel prepare_kernel = state->pool->kv_dtype == 1
+            ? runtime->qwen35_full_attention_prepare_bf16_kv
+            : runtime->qwen35_full_attention_prepare;
         cl_uint arg = 0;
         for (; arg < 11; ++arg) {
-            check_cl(clSetKernelArg(runtime->qwen35_full_attention_prepare, arg,
+            check_cl(clSetKernelArg(prepare_kernel, arg,
                                     sizeof(cl_mem), &prepare_arguments[arg]),
                      "clSetKernelArg(paged_attention_prepare)");
         }
-        check_cl(clSetKernelArg(runtime->qwen35_full_attention_prepare, arg++,
+        check_cl(clSetKernelArg(prepare_kernel, arg++,
                                 sizeof(physical_position), &physical_position),
                  "clSetKernelArg(paged_attention_physical_position)");
-        check_cl(clSetKernelArg(runtime->qwen35_full_attention_prepare, arg++,
+        check_cl(clSetKernelArg(prepare_kernel, arg++,
                                 sizeof(epsilon), &epsilon),
                  "clSetKernelArg(paged_attention_epsilon)");
 
@@ -2888,13 +2924,16 @@ qwen35_paged_full_attention_decode_device_enqueue_f32(
             state->q, state->gate, state->pool->k_pages,
             state->pool->v_pages, state->block_table, dst->data,
         };
+        cl_kernel attention_kernel = state->pool->kv_dtype == 1
+            ? runtime->qwen35_paged_full_attention_decode_bf16_kv
+            : runtime->qwen35_paged_full_attention_decode;
         for (arg = 0; arg < 6; ++arg) {
-            check_cl(clSetKernelArg(runtime->qwen35_paged_full_attention_decode,
+            check_cl(clSetKernelArg(attention_kernel,
                                     arg, sizeof(cl_mem),
                                     &attention_arguments[arg]),
                      "clSetKernelArg(paged_attention_decode)");
         }
-        check_cl(clSetKernelArg(runtime->qwen35_paged_full_attention_decode,
+        check_cl(clSetKernelArg(attention_kernel,
                                 arg++, sizeof(tokens), &tokens),
                  "clSetKernelArg(paged_attention_tokens)");
         const size_t local = 64;
@@ -2902,13 +2941,13 @@ qwen35_paged_full_attention_decode_device_enqueue_f32(
         event_owner prepare_event;
         event_owner attention_event;
         check_cl(clEnqueueNDRangeKernel(runtime->queue,
-                                        runtime->qwen35_full_attention_prepare,
+                                        prepare_kernel,
                                         1, nullptr, &global, &local, 0, nullptr,
                                         &prepare_event.value),
                  "clEnqueueNDRangeKernel(paged_attention_prepare)");
         check_cl(clEnqueueNDRangeKernel(
                      runtime->queue,
-                     runtime->qwen35_paged_full_attention_decode,
+                     attention_kernel,
                      1, nullptr, &global, &local, 0, nullptr,
                      &attention_event.value),
                  "clEnqueueNDRangeKernel(paged_attention_decode)");

@@ -240,6 +240,15 @@ layers and four KV heads. Against the observed 23.81 GiB OpenCL budget and a
 misses the policy by 0.14 GiB; dense 16K FP32 or dense 32K BF16 are the safe
 initial choices. These are planned allocations, not a full-load pass.
 
+The first policy implementation is now live for the dense paged-attention path.
+Round-to-nearest-even BF16 K/V halves the exact pool allocation and matches an
+independent BF16 cache oracle across a page boundary. On the four-layer cadence,
+BF16 measures 30.428 ms at batch one and 102.266 ms at batch four versus 30.484
+and 102.037 ms for FP32. Relative RMSE against FP32 is `4.08e-5`/`5.64e-5`.
+This validates the storage primitive and vLLM lifecycle, not 32K quality or a
+complete dense-model load. FP32 remains the default; the adapter exposes BF16 by
+argument or `VLLM_NVFP4_OPENCL_KV_DTYPE=bf16`.
+
 ## First decoder benchmarks
 
 Direct row-scaled FP8 kernels now accompany NVFP4 in the persistent runtime. A
