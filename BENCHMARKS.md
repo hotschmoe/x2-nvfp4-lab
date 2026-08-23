@@ -367,3 +367,26 @@ ladder and explicit KV/headroom accounting.
 
 Canonical artifact:
 `campaign_results/bandwidth-first/20260822-201826-627077-moe-device-bank.json`.
+
+### Cumulative real-bank residency ladder
+
+One isolated process streamed actual checkpoint experts for layers 0-18 into
+independent banks, retained every earlier bank, and validated the newly added
+layer before advancing. It stopped at the predefined 8 GiB-class gate.
+
+| Banks/layers resident | Native bank payload | Available physical memory | Newest-layer error |
+|---:|---:|---:|---:|
+| 3 | 1,364,262,912 bytes | 38,026,776,576 bytes | `1.40e-9` |
+| 5 | 2,273,771,520 bytes | 37,138,202,624 bytes | `8.15e-10` |
+| 10 | 4,547,543,040 bytes | 34,837,250,048 bytes | `2.56e-9` |
+| 19 | 8,640,331,776 bytes | 30,696,697,856 bytes | `9.31e-10` |
+
+The worst error over all 19 independently routed layer validations was
+`2.56e-9`. Available physical memory decreased by 8,706,265,088 bytes at the
+maximum gate, close to the 8,640,331,776-byte native payload. Bank destruction
+immediately recovered 8,540,033,024 bytes and returned the system to within
+166 MB of its pre-run available-memory sample. This is evidence against a large
+per-bank leak through 8.64 GB; it is not authorization to jump to 40 banks.
+
+Artifact:
+`campaign_results/bandwidth-first/20260822-202356-768080-moe-bank-residency.json`.

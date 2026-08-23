@@ -95,6 +95,11 @@ scripts/run-isolated.ps1 -Executable $python -TimeoutSeconds 180 `
 scripts/run-isolated.ps1 -Executable $python -TimeoutSeconds 300 `
   -CompletionMarker 'MOE_NVFP4_DEVICE_BANK_PASS' `
   -CommandLine '-3 native_nvfp4/bench_moe_device_bank.py --warmups 5 --samples 30'
+
+# Bounded real-layer residency ladder: approximately 1/2/4/8 GiB
+scripts/run-isolated.ps1 -Executable $python -TimeoutSeconds 300 `
+  -CompletionMarker 'MOE_NVFP4_BANK_RESIDENCY_PASS' `
+  -CommandLine '-3 native_nvfp4/bench_moe_bank_residency.py --gates 3,5,10,19'
 ```
 
 The scalar GEMV/GEMM kernels assign one work-item to each output row/vector pair

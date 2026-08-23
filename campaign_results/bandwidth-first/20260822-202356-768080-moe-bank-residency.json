@@ -1,0 +1,520 @@
+{
+  "campaign": "bandwidth-first",
+  "schema_version": 1,
+  "timestamp": "2026-08-22T20:23:56-07:00",
+  "hardware": {
+    "system_model": "ASUS Zenbook A16 UX3607OA",
+    "gpu": "Qualcomm(R) Adreno(TM) X2-90 GPU"
+  },
+  "software": {
+    "command": [
+      "native_nvfp4/bench_moe_bank_residency.py",
+      "--gates",
+      "3,5,10,19"
+    ]
+  },
+  "environment": {
+    "power_source": "AC",
+    "battery_percent": 100,
+    "thermal_regime": "warm-burst"
+  },
+  "workload": {
+    "operation": "qwen35_moe_svm_bank_residency_ladder",
+    "format": "nvfp4_expert_bank_bf16_router",
+    "first_layer": 0,
+    "gate_bank_counts": [
+      3,
+      5,
+      10,
+      19
+    ],
+    "maximum_resident_payload_bytes": 8640331776
+  },
+  "memory": {
+    "baseline_available_physical_bytes": 39402962944,
+    "before_release_available_physical_bytes": 30696697856,
+    "after_release_available_physical_bytes": 39236730880,
+    "recovered_on_release_bytes": 8540033024,
+    "reported_opencl_global_budget_bytes": 25563234304
+  },
+  "timing": {
+    "total_seconds": 24.665411500027403
+  },
+  "gates": [
+    {
+      "layer": 2,
+      "banks_resident": 3,
+      "resident_payload_bytes": 1364262912,
+      "available_physical_bytes": 38026776576,
+      "available_delta_bytes": -1376186368,
+      "load_and_validate_seconds": 0.5228429998969659,
+      "validation_kernel_ms": 0.8313,
+      "max_abs_error": 1.3969838619232178e-09,
+      "selected_experts": [
+        22,
+        164,
+        147,
+        89,
+        50,
+        23,
+        34,
+        159
+      ]
+    },
+    {
+      "layer": 4,
+      "banks_resident": 5,
+      "resident_payload_bytes": 2273771520,
+      "available_physical_bytes": 37138202624,
+      "available_delta_bytes": -2264760320,
+      "load_and_validate_seconds": 1.3637847999343649,
+      "validation_kernel_ms": 0.835,
+      "max_abs_error": 8.149072527885437e-10,
+      "selected_experts": [
+        228,
+        7,
+        94,
+        172,
+        62,
+        202,
+        54,
+        135
+      ]
+    },
+    {
+      "layer": 9,
+      "banks_resident": 10,
+      "resident_payload_bytes": 4547543040,
+      "available_physical_bytes": 34837250048,
+      "available_delta_bytes": -4565712896,
+      "load_and_validate_seconds": 1.3234087000600994,
+      "validation_kernel_ms": 0.8322,
+      "max_abs_error": 2.561137080192566e-09,
+      "selected_experts": [
+        49,
+        98,
+        122,
+        195,
+        107,
+        70,
+        168,
+        83
+      ]
+    },
+    {
+      "layer": 18,
+      "banks_resident": 19,
+      "resident_payload_bytes": 8640331776,
+      "available_physical_bytes": 30696697856,
+      "available_delta_bytes": -8706265088,
+      "load_and_validate_seconds": 1.4133810999337584,
+      "validation_kernel_ms": 0.8292,
+      "max_abs_error": 9.313225746154785e-10,
+      "selected_experts": [
+        6,
+        94,
+        195,
+        199,
+        148,
+        120,
+        99,
+        128
+      ]
+    }
+  ],
+  "layers": [
+    {
+      "layer": 0,
+      "banks_resident": 1,
+      "resident_payload_bytes": 454754304,
+      "available_physical_bytes": 38924009472,
+      "available_delta_bytes": -478953472,
+      "load_and_validate_seconds": 0.4238739999709651,
+      "validation_kernel_ms": 1.2586,
+      "max_abs_error": 1.1641532182693481e-09,
+      "selected_experts": [
+        60,
+        111,
+        188,
+        144,
+        224,
+        92,
+        105,
+        252
+      ]
+    },
+    {
+      "layer": 1,
+      "banks_resident": 2,
+      "resident_payload_bytes": 909508608,
+      "available_physical_bytes": 38470791168,
+      "available_delta_bytes": -932171776,
+      "load_and_validate_seconds": 0.5036676999880001,
+      "validation_kernel_ms": 0.8278,
+      "max_abs_error": 1.3969838619232178e-09,
+      "selected_experts": [
+        173,
+        43,
+        198,
+        166,
+        14,
+        11,
+        30,
+        193
+      ]
+    },
+    {
+      "layer": 2,
+      "banks_resident": 3,
+      "resident_payload_bytes": 1364262912,
+      "available_physical_bytes": 38026776576,
+      "available_delta_bytes": -1376186368,
+      "load_and_validate_seconds": 0.5228429998969659,
+      "validation_kernel_ms": 0.8313,
+      "max_abs_error": 1.3969838619232178e-09,
+      "selected_experts": [
+        22,
+        164,
+        147,
+        89,
+        50,
+        23,
+        34,
+        159
+      ]
+    },
+    {
+      "layer": 3,
+      "banks_resident": 4,
+      "resident_payload_bytes": 1819017216,
+      "available_physical_bytes": 37590847488,
+      "available_delta_bytes": -1812115456,
+      "load_and_validate_seconds": 1.413189599988982,
+      "validation_kernel_ms": 0.8533,
+      "max_abs_error": 1.3969838619232178e-09,
+      "selected_experts": [
+        30,
+        239,
+        14,
+        252,
+        119,
+        177,
+        92,
+        240
+      ]
+    },
+    {
+      "layer": 4,
+      "banks_resident": 5,
+      "resident_payload_bytes": 2273771520,
+      "available_physical_bytes": 37138202624,
+      "available_delta_bytes": -2264760320,
+      "load_and_validate_seconds": 1.3637847999343649,
+      "validation_kernel_ms": 0.835,
+      "max_abs_error": 8.149072527885437e-10,
+      "selected_experts": [
+        228,
+        7,
+        94,
+        172,
+        62,
+        202,
+        54,
+        135
+      ]
+    },
+    {
+      "layer": 5,
+      "banks_resident": 6,
+      "resident_payload_bytes": 2728525824,
+      "available_physical_bytes": 36679073792,
+      "available_delta_bytes": -2723889152,
+      "load_and_validate_seconds": 1.275242600007914,
+      "validation_kernel_ms": 0.8265,
+      "max_abs_error": 6.984919309616089e-10,
+      "selected_experts": [
+        18,
+        243,
+        12,
+        13,
+        115,
+        255,
+        164,
+        251
+      ]
+    },
+    {
+      "layer": 6,
+      "banks_resident": 7,
+      "resident_payload_bytes": 3183280128,
+      "available_physical_bytes": 36217626624,
+      "available_delta_bytes": -3185336320,
+      "load_and_validate_seconds": 1.2591893000062555,
+      "validation_kernel_ms": 0.8487,
+      "max_abs_error": 6.984919309616089e-10,
+      "selected_experts": [
+        137,
+        233,
+        132,
+        166,
+        110,
+        53,
+        235,
+        146
+      ]
+    },
+    {
+      "layer": 7,
+      "banks_resident": 8,
+      "resident_payload_bytes": 3638034432,
+      "available_physical_bytes": 35756728320,
+      "available_delta_bytes": -3646234624,
+      "load_and_validate_seconds": 1.4376705000177026,
+      "validation_kernel_ms": 0.8533,
+      "max_abs_error": 9.313225746154785e-10,
+      "selected_experts": [
+        181,
+        198,
+        75,
+        91,
+        206,
+        54,
+        166,
+        101
+      ]
+    },
+    {
+      "layer": 8,
+      "banks_resident": 9,
+      "resident_payload_bytes": 4092788736,
+      "available_physical_bytes": 35298058240,
+      "available_delta_bytes": -4104904704,
+      "load_and_validate_seconds": 1.348132700077258,
+      "validation_kernel_ms": 0.7956,
+      "max_abs_error": 1.1641532182693481e-09,
+      "selected_experts": [
+        245,
+        50,
+        116,
+        4,
+        122,
+        110,
+        7,
+        69
+      ]
+    },
+    {
+      "layer": 9,
+      "banks_resident": 10,
+      "resident_payload_bytes": 4547543040,
+      "available_physical_bytes": 34837250048,
+      "available_delta_bytes": -4565712896,
+      "load_and_validate_seconds": 1.3234087000600994,
+      "validation_kernel_ms": 0.8322,
+      "max_abs_error": 2.561137080192566e-09,
+      "selected_experts": [
+        49,
+        98,
+        122,
+        195,
+        107,
+        70,
+        168,
+        83
+      ]
+    },
+    {
+      "layer": 10,
+      "banks_resident": 11,
+      "resident_payload_bytes": 5002297344,
+      "available_physical_bytes": 34361815040,
+      "available_delta_bytes": -5041147904,
+      "load_and_validate_seconds": 1.3528268000809476,
+      "validation_kernel_ms": 0.8305,
+      "max_abs_error": 8.149072527885437e-10,
+      "selected_experts": [
+        9,
+        245,
+        229,
+        179,
+        28,
+        144,
+        74,
+        35
+      ]
+    },
+    {
+      "layer": 11,
+      "banks_resident": 12,
+      "resident_payload_bytes": 5457051648,
+      "available_physical_bytes": 33917009920,
+      "available_delta_bytes": -5485953024,
+      "load_and_validate_seconds": 1.4676269000628963,
+      "validation_kernel_ms": 0.8605,
+      "max_abs_error": 8.149072527885437e-10,
+      "selected_experts": [
+        153,
+        179,
+        36,
+        48,
+        130,
+        142,
+        111,
+        43
+      ]
+    },
+    {
+      "layer": 12,
+      "banks_resident": 13,
+      "resident_payload_bytes": 5911805952,
+      "available_physical_bytes": 33458896896,
+      "available_delta_bytes": -5944066048,
+      "load_and_validate_seconds": 1.3976749000139534,
+      "validation_kernel_ms": 0.8241,
+      "max_abs_error": 1.3969838619232178e-09,
+      "selected_experts": [
+        248,
+        171,
+        62,
+        2,
+        251,
+        68,
+        0,
+        110
+      ]
+    },
+    {
+      "layer": 13,
+      "banks_resident": 14,
+      "resident_payload_bytes": 6366560256,
+      "available_physical_bytes": 33000218624,
+      "available_delta_bytes": -6402744320,
+      "load_and_validate_seconds": 1.4316779000218958,
+      "validation_kernel_ms": 0.8304,
+      "max_abs_error": 8.149072527885437e-10,
+      "selected_experts": [
+        167,
+        180,
+        205,
+        148,
+        218,
+        115,
+        171,
+        33
+      ]
+    },
+    {
+      "layer": 14,
+      "banks_resident": 15,
+      "resident_payload_bytes": 6821314560,
+      "available_physical_bytes": 32526495744,
+      "available_delta_bytes": -6876467200,
+      "load_and_validate_seconds": 1.438027000054717,
+      "validation_kernel_ms": 0.8319,
+      "max_abs_error": 1.3969838619232178e-09,
+      "selected_experts": [
+        244,
+        230,
+        71,
+        38,
+        22,
+        216,
+        162,
+        55
+      ]
+    },
+    {
+      "layer": 15,
+      "banks_resident": 16,
+      "resident_payload_bytes": 7276068864,
+      "available_physical_bytes": 32078565376,
+      "available_delta_bytes": -7324397568,
+      "load_and_validate_seconds": 1.3484632999170572,
+      "validation_kernel_ms": 0.8268,
+      "max_abs_error": 6.984919309616089e-10,
+      "selected_experts": [
+        53,
+        225,
+        184,
+        96,
+        36,
+        246,
+        248,
+        34
+      ]
+    },
+    {
+      "layer": 16,
+      "banks_resident": 17,
+      "resident_payload_bytes": 7730823168,
+      "available_physical_bytes": 31590379520,
+      "available_delta_bytes": -7812583424,
+      "load_and_validate_seconds": 1.8744795999955386,
+      "validation_kernel_ms": 0.865,
+      "max_abs_error": 6.984919309616089e-10,
+      "selected_experts": [
+        75,
+        131,
+        101,
+        78,
+        18,
+        175,
+        26,
+        54
+      ]
+    },
+    {
+      "layer": 17,
+      "banks_resident": 18,
+      "resident_payload_bytes": 8185577472,
+      "available_physical_bytes": 31149879296,
+      "available_delta_bytes": -8253083648,
+      "load_and_validate_seconds": 1.3638473999453709,
+      "validation_kernel_ms": 0.8297,
+      "max_abs_error": 9.313225746154785e-10,
+      "selected_experts": [
+        106,
+        102,
+        236,
+        218,
+        91,
+        150,
+        144,
+        65
+      ]
+    },
+    {
+      "layer": 18,
+      "banks_resident": 19,
+      "resident_payload_bytes": 8640331776,
+      "available_physical_bytes": 30696697856,
+      "available_delta_bytes": -8706265088,
+      "load_and_validate_seconds": 1.4133810999337584,
+      "validation_kernel_ms": 0.8292,
+      "max_abs_error": 9.313225746154785e-10,
+      "selected_experts": [
+        6,
+        94,
+        195,
+        199,
+        148,
+        120,
+        99,
+        128
+      ]
+    }
+  ],
+  "correctness": {
+    "passed": true,
+    "layers_validated": 19,
+    "maximum_abs_error": 2.561137080192566e-09,
+    "finite_outputs": true,
+    "explicit_completion_marker": true
+  },
+  "limitations": [
+    "bounded at the requested 19 banks rather than attempting full residency",
+    "available physical memory is a system-wide sample, not an OpenCL budget counter",
+    "each layer is validated independently; a 19-layer token graph is not timed",
+    "non-expert model weights, KV, recurrent state, and serving scratch are excluded"
+  ]
+}

@@ -564,10 +564,11 @@ Prioritized next questions, including work not yet performed:
    admission, prefix reuse, continuous batching, cancellation, structured
    output, and coding-client compatibility. Backend replacement is not useful
    before this common native boundary exists.
-5. **Memory-pressure behavior.** Stage 1/2/4/8 GiB SVM residency, record Windows
-   commit and OpenCL budgets, force neither swapping nor driver reset, and
-   determine whether eviction is predictable enough for an elastic layer or
-   expert cache.
+5. **Memory pressure beyond 8 GiB.** The real 1/2/4/8 GiB-class SVM ladder now
+   passes through 19 banks/8.64 GB and releases 8.54 GB immediately. Before the
+   next gate, inventory every non-expert tensor, KV/recurrent-state budget,
+   scratch allocation, and Windows/device reserve; then determine whether an
+   elastic layer or expert cache is necessary.
 6. **Expert residency policy.** Measure per-layer routing locality over real
    coding traces, determine whether all 256 experts fit inside the safe OpenCL
    budget, and compare full residency, layer streaming, and frequency-aware
@@ -589,6 +590,13 @@ while OpenCL reports 23.81 GiB of global memory. That leaves roughly 2 GiB for
 KV, recurrent state, embeddings, LM head, activations, scratch, driver behavior,
 and safety margin. Do not jump directly to 40 banks; use staged cumulative
 residency and retain layer streaming/cache as a policy arm.
+
+The bounded experiment subsequently retained 19 actual checkpoint layer banks
+at once (8,640,331,776 bytes), validated each routed output, and observed
+8,540,033,024 bytes return immediately on destruction. Available physical
+memory at the maximum gate remained 30.70 GB. This establishes a safe current
+gate, not a full-model guarantee, because the experiment deliberately excluded
+all non-expert resident tensors and serving state.
 
 ## Research sources
 

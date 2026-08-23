@@ -1,0 +1,137 @@
+{
+  "campaign": "bandwidth-first",
+  "schema_version": 1,
+  "timestamp": "2026-08-22T20:23:19-07:00",
+  "hardware": {
+    "system_model": "ASUS Zenbook A16 UX3607OA",
+    "gpu": "Qualcomm(R) Adreno(TM) X2-90 GPU"
+  },
+  "software": {
+    "command": [
+      "native_nvfp4/bench_moe_bank_residency.py",
+      "--gates",
+      "3"
+    ]
+  },
+  "environment": {
+    "power_source": "AC",
+    "battery_percent": 100,
+    "thermal_regime": "warm-burst"
+  },
+  "workload": {
+    "operation": "qwen35_moe_svm_bank_residency_ladder",
+    "format": "nvfp4_expert_bank_bf16_router",
+    "first_layer": 0,
+    "gate_bank_counts": [
+      3
+    ],
+    "maximum_resident_payload_bytes": 1364262912
+  },
+  "memory": {
+    "baseline_available_physical_bytes": 39432921088,
+    "before_release_available_physical_bytes": 38055251968,
+    "after_release_available_physical_bytes": 39268577280,
+    "recovered_on_release_bytes": 1213325312,
+    "reported_opencl_global_budget_bytes": 25563234304
+  },
+  "timing": {
+    "total_seconds": 3.2285092999227345
+  },
+  "gates": [
+    {
+      "layer": 2,
+      "banks_resident": 3,
+      "resident_payload_bytes": 1364262912,
+      "available_physical_bytes": 38055251968,
+      "available_delta_bytes": -1377669120,
+      "load_and_validate_seconds": 1.421569099999033,
+      "validation_kernel_ms": 0.8342,
+      "max_abs_error": 1.3969838619232178e-09,
+      "selected_experts": [
+        22,
+        164,
+        147,
+        89,
+        50,
+        23,
+        34,
+        159
+      ]
+    }
+  ],
+  "layers": [
+    {
+      "layer": 0,
+      "banks_resident": 1,
+      "resident_payload_bytes": 454754304,
+      "available_physical_bytes": 38929715200,
+      "available_delta_bytes": -503205888,
+      "load_and_validate_seconds": 0.42518970009405166,
+      "validation_kernel_ms": 0.7804,
+      "max_abs_error": 1.1641532182693481e-09,
+      "selected_experts": [
+        60,
+        111,
+        188,
+        144,
+        224,
+        92,
+        105,
+        252
+      ]
+    },
+    {
+      "layer": 1,
+      "banks_resident": 2,
+      "resident_payload_bytes": 909508608,
+      "available_physical_bytes": 38514171904,
+      "available_delta_bytes": -918749184,
+      "load_and_validate_seconds": 1.2844564999686554,
+      "validation_kernel_ms": 0.8228,
+      "max_abs_error": 1.3969838619232178e-09,
+      "selected_experts": [
+        173,
+        43,
+        198,
+        166,
+        14,
+        11,
+        30,
+        193
+      ]
+    },
+    {
+      "layer": 2,
+      "banks_resident": 3,
+      "resident_payload_bytes": 1364262912,
+      "available_physical_bytes": 38055251968,
+      "available_delta_bytes": -1377669120,
+      "load_and_validate_seconds": 1.421569099999033,
+      "validation_kernel_ms": 0.8342,
+      "max_abs_error": 1.3969838619232178e-09,
+      "selected_experts": [
+        22,
+        164,
+        147,
+        89,
+        50,
+        23,
+        34,
+        159
+      ]
+    }
+  ],
+  "correctness": {
+    "passed": true,
+    "layers_validated": 3,
+    "maximum_abs_error": 1.3969838619232178e-09,
+    "finite_outputs": true,
+    "explicit_completion_marker": true
+  },
+  "limitations": [
+    "bounded at the requested 19 banks rather than attempting full residency",
+    "available physical memory is a system-wide sample, not an OpenCL budget counter",
+    "each layer is validated independently; a 19-layer token graph is not timed",
+    "non-expert model weights, KV, recurrent state, and serving scratch are excluded"
+  ]
+}

@@ -218,6 +218,13 @@ host boundary. The 30-sample result is 0.7563 ms kernel / 0.9231 ms wall with
 is 454.75 MB per layer; 40 banks are 16.94 GiB, so staged full-checkpoint budget
 validation is now the binding MoE task.
 
+The bounded residency ladder now passes with actual layers at 3/5/10/19 banks,
+or 1.36/2.27/4.55/8.64 GB of native payload. Every new layer was routed and
+validated while all earlier banks remained live; maximum error was `2.56e-9`.
+Closing the 19 banks recovered 8.54 GB immediately. This completes the planned
+1/2/4/8 GiB safety ladder, but the remaining full-model budget is still too
+tight to skip explicit non-expert, KV, scratch, and Windows headroom accounting.
+
 ## First decoder benchmarks
 
 Direct row-scaled FP8 kernels now accompany NVFP4 in the persistent runtime. A

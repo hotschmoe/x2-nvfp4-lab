@@ -217,6 +217,12 @@ Validation ladder:
 6. the existing four-layer cadence;
 7. 1, 2, 4, and 8 GiB cumulative payload gates.
 
+The cumulative gate is now complete through 8 GiB-class residency. One isolated
+process retained real layer banks at 1.36, 2.27, 4.55, and 8.64 GB, validated
+all 19 routed outputs with `2.56e-9` worst error, and recovered 8.54 GB when the
+banks were destroyed. Larger residency remains gated on full non-expert/KV and
+headroom accounting.
+
 Exit gate:
 
 - CPU and GPU consume the same SVM-backed matrix and match their existing
@@ -573,6 +579,7 @@ Reproduction entry points:
 - `native_nvfp4/bench_moe_experts.py`
 - `native_nvfp4/bench_moe_routed_layer.py`
 - `native_nvfp4/bench_moe_device_bank.py`
+- `native_nvfp4/bench_moe_bank_residency.py`
 - `campaign_results/bandwidth-first/*.json`
 - `logs/20260822-194606-767.stdout.log` (complete SVM MLP)
 - `logs/20260822-194623-106.stdout.log` (complete SVM decoder layer)
