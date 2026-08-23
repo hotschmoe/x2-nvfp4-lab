@@ -585,6 +585,7 @@ Reproduction entry points:
 - `native_nvfp4/bench_moe_linear_layer.py`
 - `native_nvfp4/bench_moe_cadence.py`
 - `native_nvfp4/probe_moe_lm_head.py`
+- `native_nvfp4/bench_moe_full_model.py`
 - `native_nvfp4/probe_tensor_scaled_fp8.py`
 - `native_nvfp4/inventory_checkpoint_memory.py`
 - `campaign_results/bandwidth-first/*.json`

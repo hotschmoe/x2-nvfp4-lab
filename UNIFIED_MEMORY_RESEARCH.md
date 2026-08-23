@@ -6,15 +6,15 @@ Execution plan: [Campaign: Bandwidth First](CAMPAIGN_BANDWIDTH_FIRST.md)
 
 ## Executive conclusion
 
-The runtime now has a measured, shared-memory execution foundation. Its next
-milestone is to turn the proven four-layer sparse cadence into a complete,
-budget-qualified token step:
+The runtime now has a measured, budget-qualified complete Ornith text token.
+Its next milestone is to turn that one-token gate into sustained,
+client-facing autoregressive serving:
 
-1. build the complete 40-layer matrix/state registry under the measured OpenCL
-   and Windows headroom policy;
-2. compose the proven final norm/LM head with all layers, then add sampling and
-   tokenizer-facing request plumbing;
-3. qualify full-checkpoint residency or select a measured expert-cache policy;
+1. retain KV, gated-delta, and convolution state across generated tokens;
+2. add tokenizer assets and greedy/top-k/top-p sampling without downloading the
+   entire vocabulary when the policy permits;
+3. measure sustained generation, prefix ingestion, and coding-client request
+   lifecycle under the proven full-residency policy;
 4. preserve the one-queue device cadence through the existing vLLM adapter;
 5. then compare vLLM, SGLang, and Atlas control-plane behavior on the same native
    executor.
@@ -551,10 +551,10 @@ The earlier crashes make benchmark containment part of the architecture:
 
 Prioritized next questions, including work not yet performed:
 
-1. **Complete 40-layer token boundary.** The native 248,320-row NVFP4 LM head
-   now passes independently. Build the full matrix/state registry, compose the
-   head, add sampling, and measure a real checkpoint token before promoting any
-   ten-cadence projection.
+1. **Sustained autoregressive token loop.** The complete 40-layer token now
+   measures 75.8837 ms kernel / 79.3810 ms wall with all weights and 32K BF16 KV
+   capacity resident. Retain state across generated tokens, gather each next
+   embedding row lazily, and qualify throughput/output over a real prompt.
 2. **Further MoE fusion.** Device-resident 256-way top-8 and contiguous-bank
    dispatch now pass. Next compare fused gate/up, SiLU/down, shared-slot, and
    weighted-reduction variants, and expose per-kernel component timing.
@@ -621,14 +621,14 @@ that checkpoint file size is not the device working set:
 - reserve 2 GiB below OpenCL's reported 23.81 GiB for allocator behavior and
   activation/scheduler scratch not yet measured.
 
-This yields 18.448 GiB of planned resident compute weights for MoE and
-17.792 GiB for dense. With the runtime's current FP32 caches, use 32K context for
-MoE and 16K for dense during the full-load qualification. Do not enable the
-numerically possible MoE 64K cell yet: it leaves only 0.794 GiB beyond the 2 GiB
-reserve and full residency has not passed. BF16 KV is the next target, enabling
-dense 32K with 1.860 GiB beyond the reserve and MoE 64K with 2.044 GiB. FP8 KV
-must pass an end-to-end long-context quality gate before it can unlock dense
-64K or higher concurrency.
+This yields 18.448 GiB of resident compute weights for MoE and 17.792 GiB
+planned for dense. MoE has now passed a complete load and token at 32K BF16:
+19,807,914,740 checkpoint bytes plus a 671,088,640-byte KV pool, recurrent
+state, and reusable graph scratch. Keep MoE 64K disabled until it passes the
+same complete-load and long-context gates. Dense still needs its full-load
+qualification; use 16K FP32 or the already proven 32K BF16 storage policy for
+that attempt. FP8 KV must pass an end-to-end long-context quality gate before
+it can unlock dense 64K or higher concurrency.
 
 The BF16 storage path now passes both exact head profiles: dense 24/4 and MoE
 16/2. Dense also passes four-layer batch-one/four cadence and vLLM lifecycle.

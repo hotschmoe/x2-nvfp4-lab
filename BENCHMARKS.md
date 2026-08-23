@@ -570,3 +570,47 @@ This isolates a synthetic hidden state. It proves the final arithmetic and full
 vocabulary allocation, but not yet a 40-layer checkpoint token or sampling
 policy. Canonical artifact:
 `20260823-041604-638698-moe-lm-head.json`.
+
+## Complete 35B MoE text-model residency and token
+
+The full coding-endpoint registry now loads every real text-compute tensor in
+the Ornith checkpoint while deliberately omitting vision and MTP and touching
+only the requested BF16 embedding row. Immutable matrices are uploaded once;
+all 40 expert banks remain resident; the 30 linear-attention layers own their
+recurrent and convolution state; and the 10 full-attention layers share a BF16
+paged pool sized for 32K context. Model-wide activation buffers are reused on
+the in-order queue.
+
+The staged isolated-process gates all independently validated their last loaded
+bank:
+
+| Resident banks | Checkpoint-native text payload | Available physical memory | Last-bank max abs |
+|---:|---:|---:|---:|
+| 24 | 12,514,953,780 B | 25,934,319,616 B | `6.40e-10` |
+| 30 | 15,249,814,140 B | 23,164,715,008 B | `9.31e-10` |
+| 35 | 17,528,864,440 B | 20,867,960,832 B | `2.33e-9` |
+| 40 | 19,807,914,740 B | 18,773,078,016 B | `9.31e-10` |
+
+The 40-bank payload exactly equals the metadata inventory's complete resident
+text-compute set (18.448 GiB). The 32K BF16 pool contributes 671,088,640 bytes
+of KV capacity beyond checkpoint payload. The full allocation returned
+20,427,419,648 bytes of physical memory on teardown without a driver reset.
+
+A BF16 embedding row for token 248044 was then queued through all 40 real
+checkpoint layers, final RMSNorm, and all 248,320 LM-head rows. One
+synchronization covers the model graph; logits are downloaded for host argmax.
+
+| Complete token | Median kernel | Median wall | Wall throughput | Output token | Composition error |
+|---|---:|---:|---:|---:|---:|
+| 40 layers + final head | 75.8837 ms | 79.3810 ms | 12.60 tok/s | 95,726 | `0` |
+
+The composition oracle resets the same proven states and synchronizes after
+every layer. Its logits are bit-identical to the single-queue result. The
+individual attention, expert-bank, FP8, NVFP4, and LM-head operators retain
+their independent CPU oracles. This is a real complete-text-model token, but it
+is still a one-token warm-burst gate: autoregressive state retention, tokenizer
+assets, device/partial-logit sampling, and sustained thermal behavior remain to
+be measured.
+
+Canonical artifact:
+`20260823-042544-384217-moe-full-model-token.json`.

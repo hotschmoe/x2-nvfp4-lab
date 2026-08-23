@@ -163,12 +163,12 @@ Completed since the initial boundary was written:
 
 The next implementation boundary is now:
 
-1. Expand the proven four-layer sparse cadence into a budget-aware 40-layer
-   matrix registry and per-request state arena.
-2. Add final RMSNorm, tensor-scaled FP8 LM head, sampling, and tokenizer-facing
-   request plumbing for the first complete checkpoint token.
-3. Execute staged 24/30/35/40-bank residency gates while adding non-expert
-   weights, KV, recurrent state, and reusable scratch in policy order.
+1. Retain all 40 layers' KV, gated-delta, and convolution state across a real
+   autoregressive generation loop.
+2. Gather each generated token's embedding row lazily and add device or
+   partial-logit greedy/top-k/top-p sampling.
+3. Measure sustained decode and prefill under the complete 32K BF16 residency
+   policy, including thermal behavior and more than one request.
 4. Connect the complete token boundary to continuous batching in the vLLM OOT
    worker, then compare its control plane with SGLang and Atlas.
 5. Move HTP QHPI skeleton generation to an x86-64 Python 3.10 build host, then
@@ -284,6 +284,16 @@ and block scales. Final RMSNorm plus all vocabulary logits measures 9.1450 ms
 kernel / 11.0537 ms wall, matches an independent chunked CPU decoder within
 `2.86e-6`, and returns the same argmax. The open boundary is composition with
 the complete 40-layer registry, not LM-head arithmetic.
+
+That registry now passes. All 19,807,914,740 bytes (18.448 GiB) of planned
+Ornith text-compute checkpoint payload coexist with the 40-layer graph and a
+671,088,640-byte 32K BF16 KV pool. The staged 24/30/35/40-bank gates validate
+independently, and teardown recovers 20,427,419,648 bytes without a driver
+reset. A lazy BF16 embedding row then traverses all 40 real layers and the full
+LM head in 75.8837 ms kernel / 79.3810 ms wall, or 12.60 measured tokens/s.
+Single-queue logits are bit-identical to the same graph synchronized after each
+layer. The next correctness boundary is retained-state autoregressive decoding,
+not a larger residency projection.
 
 ## First decoder benchmarks
 

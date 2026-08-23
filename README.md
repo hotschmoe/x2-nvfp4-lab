@@ -34,6 +34,10 @@ Current highlights on an Adreno X2-90:
   four expert banks, all recurrent/KV state, 6.417 ms kernel / 6.867 ms wall.
 - The 248,320-token final RMSNorm + checkpoint-native NVFP4 LM head passes an
   independent CPU oracle at 9.145 ms kernel / 11.054 ms wall.
+- The complete Ornith coding text model now fits at once: all 40 layers, 40
+  expert banks, 32K BF16 KV capacity, final head, and one lazy embedding row.
+  A real queued checkpoint token measures 75.884 ms kernel / 79.381 ms wall
+  (**12.60 tok/s**) with exact composition-oracle logits.
 - Independent CPU/GPU tensor oracles and isolated-process accelerator gates.
 
 Start with [CAMPAIGN_BANDWIDTH_FIRST.md](CAMPAIGN_BANDWIDTH_FIRST.md) and
