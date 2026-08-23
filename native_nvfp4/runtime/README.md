@@ -50,3 +50,9 @@ The runtime must outlive its matrix and state handles. The current API is delibe
 synchronous and accepts float32 CPU activation/output pointers. Persistent native
 weights are solved; zero-copy or staged asynchronous activations are the next ABI
 revision.
+
+`nvfp4_linear_device_lab_f32` is an intentionally synchronous experimental ABI.
+It sweeps row sharing, dynamic local K tiles, direct-global controls, and
+scalar/vector decode without changing production kernel selection. Use
+`native_nvfp4/bench_nvfp4_kernel_lab.py`; candidates must pass its output oracle
+before timing and still require full-model A/B before promotion.

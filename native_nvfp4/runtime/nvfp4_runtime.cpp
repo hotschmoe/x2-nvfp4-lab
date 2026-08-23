@@ -163,6 +163,10 @@ struct nvfp4_runtime {
     cl_kernel gemm_scalar = nullptr;
     cl_kernel gemv_subgroup = nullptr;
     cl_kernel gemv_rows_tiled = nullptr;
+    cl_kernel gemv_rows_lab_scalar = nullptr;
+    cl_kernel gemv_rows_lab_vector = nullptr;
+    cl_kernel gemv_rows_lab_direct_scalar = nullptr;
+    cl_kernel gemv_rows_lab_direct_vector = nullptr;
     cl_kernel gemm_subgroup = nullptr;
     cl_kernel gemm_tiled = nullptr;
     cl_kernel fp8_gemv_scalar = nullptr;
@@ -268,6 +272,10 @@ struct nvfp4_runtime {
         if (fp8_gemv_scalar) clReleaseKernel(fp8_gemv_scalar);
         if (gemm_tiled) clReleaseKernel(gemm_tiled);
         if (gemm_subgroup) clReleaseKernel(gemm_subgroup);
+        if (gemv_rows_lab_vector) clReleaseKernel(gemv_rows_lab_vector);
+        if (gemv_rows_lab_scalar) clReleaseKernel(gemv_rows_lab_scalar);
+        if (gemv_rows_lab_direct_vector) clReleaseKernel(gemv_rows_lab_direct_vector);
+        if (gemv_rows_lab_direct_scalar) clReleaseKernel(gemv_rows_lab_direct_scalar);
         if (gemv_rows_tiled) clReleaseKernel(gemv_rows_tiled);
         if (gemv_subgroup) clReleaseKernel(gemv_subgroup);
         if (gemm_scalar) clReleaseKernel(gemm_scalar);
@@ -711,6 +719,55 @@ void enqueue_nvfp4_linear(
              "clEnqueueNDRangeKernel");
 }
 
+void enqueue_nvfp4_lab_linear(
+    nvfp4_runtime * runtime,
+    const nvfp4_matrix * matrix,
+    cl_mem input,
+    cl_mem output,
+    int row_tile,
+    int k_tile,
+    int decode_kind,
+    cl_event * event) {
+    cl_kernel kernel = decode_kind == 0
+        ? runtime->gemv_rows_lab_scalar
+        : (decode_kind == 1
+            ? runtime->gemv_rows_lab_vector
+            : (decode_kind == 2
+                ? runtime->gemv_rows_lab_direct_scalar
+                : runtime->gemv_rows_lab_direct_vector));
+    cl_uint arg = 0;
+    check_cl(clSetKernelArg(kernel, arg++, sizeof(cl_mem), &matrix->packed),
+             "clSetKernelArg(lab_packed)");
+    check_cl(clSetKernelArg(kernel, arg++, sizeof(cl_mem), &matrix->scales),
+             "clSetKernelArg(lab_scales)");
+    check_cl(clSetKernelArg(kernel, arg++, sizeof(cl_mem), &input),
+             "clSetKernelArg(lab_input)");
+    check_cl(clSetKernelArg(kernel, arg++, sizeof(cl_mem), &output),
+             "clSetKernelArg(lab_output)");
+    check_cl(clSetKernelArg(kernel, arg++, sizeof(int), &matrix->cols),
+             "clSetKernelArg(lab_cols)");
+    check_cl(clSetKernelArg(kernel, arg++, sizeof(int), &matrix->rows),
+             "clSetKernelArg(lab_rows)");
+    check_cl(clSetKernelArg(kernel, arg++, sizeof(float),
+                            &matrix->inv_weight_global_scale),
+             "clSetKernelArg(lab_global_scale)");
+    if (decode_kind < 2) {
+        check_cl(clSetKernelArg(kernel, arg++, sizeof(int), &k_tile),
+                 "clSetKernelArg(lab_k_tile)");
+        const size_t local_bytes = static_cast<size_t>(k_tile)*sizeof(float);
+        check_cl(clSetKernelArg(kernel, arg++, local_bytes, nullptr),
+                 "clSetKernelArg(lab_x_tile)");
+    }
+
+    const size_t local = 64u*static_cast<size_t>(row_tile);
+    const size_t groups =
+        (static_cast<size_t>(matrix->rows) + row_tile - 1u)/row_tile;
+    const size_t global = groups*local;
+    check_cl(clEnqueueNDRangeKernel(runtime->queue, kernel, 1, nullptr,
+                                    &global, &local, 0, nullptr, event),
+             "clEnqueueNDRangeKernel(lab_rows_tuned)");
+}
+
 void enqueue_fp8_linear(
     nvfp4_runtime * runtime,
     const fp8_matrix * matrix,
@@ -891,6 +948,14 @@ extern "C" NVFP4_API nvfp4_status nvfp4_runtime_create(
         holder->gemm_scalar = make_kernel("nvfp4_native_gemm");
         holder->gemv_subgroup = make_kernel("nvfp4_native_gemv_subgroup");
         holder->gemv_rows_tiled = make_kernel("nvfp4_native_gemv_rows_tiled");
+        holder->gemv_rows_lab_scalar = make_kernel(
+            "nvfp4_native_gemv_rows_lab_scalar");
+        holder->gemv_rows_lab_vector = make_kernel(
+            "nvfp4_native_gemv_rows_lab_vector");
+        holder->gemv_rows_lab_direct_scalar = make_kernel(
+            "nvfp4_native_gemv_rows_lab_direct_scalar");
+        holder->gemv_rows_lab_direct_vector = make_kernel(
+            "nvfp4_native_gemv_rows_lab_direct_vector");
         holder->gemm_subgroup = make_kernel("nvfp4_native_gemm_subgroup");
         holder->gemm_tiled = make_kernel("nvfp4_native_gemm_tiled");
         holder->fp8_gemv_scalar = make_kernel("fp8_native_gemv_scalar");
@@ -1987,6 +2052,60 @@ extern "C" NVFP4_API nvfp4_status nvfp4_linear_device_enqueue_f32(
         enqueue_nvfp4_linear(runtime, matrix, x->data, vectors, dst->data,
                              kernel_kind, &kernel_event.value);
         retain_profile_event(runtime, kernel_event, "nvfp4_linear");
+        g_last_error.clear();
+        return NVFP4_STATUS_OK;
+    } catch (const opencl_error & error) {
+        return fail(NVFP4_STATUS_OPENCL_ERROR, error);
+    } catch (const std::exception & error) {
+        return fail(NVFP4_STATUS_INTERNAL_ERROR, error);
+    }
+}
+
+extern "C" NVFP4_API nvfp4_status nvfp4_linear_device_lab_f32(
+    nvfp4_runtime * runtime,
+    const nvfp4_matrix * matrix,
+    const nvfp4_buffer * x,
+    nvfp4_buffer * dst,
+    int row_tile,
+    int k_tile,
+    int decode_kind) {
+    if (!runtime || !matrix || matrix->runtime != runtime || !x ||
+        x->runtime != runtime || !dst || dst->runtime != runtime ||
+        row_tile <= 0 || (row_tile & (row_tile - 1)) != 0 ||
+        k_tile < 16 || k_tile % 16 != 0 ||
+        (decode_kind < 0 || decode_kind > 3)) {
+        return fail_invalid("invalid kernel-lab linear arguments");
+    }
+    const size_t input_bytes = static_cast<size_t>(matrix->cols)*sizeof(float);
+    const size_t output_bytes = static_cast<size_t>(matrix->rows)*sizeof(float);
+    if (x->bytes < input_bytes || dst->bytes < output_bytes) {
+        return fail_invalid("kernel-lab device buffer capacity is too small");
+    }
+    try {
+        size_t max_work_group = 0;
+        cl_ulong local_memory = 0;
+        check_cl(clGetDeviceInfo(runtime->device, CL_DEVICE_MAX_WORK_GROUP_SIZE,
+                                 sizeof(max_work_group), &max_work_group, nullptr),
+                 "clGetDeviceInfo(max_work_group_size)");
+        check_cl(clGetDeviceInfo(runtime->device, CL_DEVICE_LOCAL_MEM_SIZE,
+                                 sizeof(local_memory), &local_memory, nullptr),
+                 "clGetDeviceInfo(local_memory_size)");
+        if (64u*static_cast<size_t>(row_tile) > max_work_group) {
+            return fail_invalid("kernel-lab row tile exceeds device work-group size");
+        }
+        if (decode_kind < 2 &&
+            static_cast<size_t>(k_tile)*sizeof(float) > local_memory) {
+            return fail_invalid("kernel-lab K tile exceeds device local memory");
+        }
+
+        std::lock_guard<std::mutex> lock(runtime->queue_mutex);
+        event_owner kernel_event;
+        enqueue_nvfp4_lab_linear(runtime, matrix, x->data, dst->data,
+                                  row_tile, k_tile, decode_kind,
+                                  &kernel_event.value);
+        check_cl(clWaitForEvents(1, &kernel_event.value),
+                 "clWaitForEvents(kernel_lab_linear)");
+        runtime->last_profile = {0, event_duration_ns(kernel_event), 0};
         g_last_error.clear();
         return NVFP4_STATUS_OK;
     } catch (const opencl_error & error) {

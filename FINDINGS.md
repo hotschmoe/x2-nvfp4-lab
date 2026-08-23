@@ -370,3 +370,19 @@ The Hexagon NPU was also validated through QAIRT 2.45.40: FastRPC and the v81
 calculator unit test pass. Stock HTP deployment supports FP16/INT8/INT16 rather
 than packed NVFP4, so direct E2M1 consumption needs a custom HTP op package. See
 `SERVING.md` and `native_nvfp4/npu/README.md` for the worker and device split.
+
+## Shape-specific NVFP4 decode structure
+
+A lab-only ABI leaves production selection untouched while sweeping 70 kernel
+treatments on each of five complete checkpoint shapes. Two opposite-order runs
+accepted all 350 correctness gates each. The dense 17408x5120 and 5120x17408
+projections repeatedly chose 16 shared rows and an 8192-element dynamic local
+allocation, reaching about 45 GB/s and 1.31-1.32x the production kernel. The
+248320x2048 head chose eight rows and 2048/4096, reaching 40.86 GB/s and 1.225x.
+
+The small shapes reject a single global rule: the 512x2048 expert gate chose 16
+rows while 2048x512 expert down chose four. Direct-global access loses on dense
+and head shapes, proving local activation reuse repays its barriers there.
+Explicit `uchar8`/`float8` decode also loses on the large shapes, so nominal load
+width is not evidence of lower instruction/register cost. See
+`NVFP4_KERNEL_LAB.md` and the two canonical `*-nvfp4-kernel-lab.json` artifacts.

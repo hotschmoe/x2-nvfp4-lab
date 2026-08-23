@@ -263,6 +263,21 @@ NVFP4_API nvfp4_status nvfp4_linear_device_enqueue_f32(
     nvfp4_buffer * dst,
     nvfp4_kernel_kind kernel_kind);
 
+// Synchronous decode-only kernel-lab path. It sweeps implementation choices
+// without changing production kernel selection. row_tile controls how many
+// 64-lane half-wave subgroups share each activation tile; k_tile is the number
+// of float32 activation elements staged in local memory. decode_kind selects
+// local-scalar (0), local-vector (1), direct-global scalar (2), or direct-global
+// vector (3). k_tile is ignored by direct-global paths.
+NVFP4_API nvfp4_status nvfp4_linear_device_lab_f32(
+    nvfp4_runtime * runtime,
+    const nvfp4_matrix * matrix,
+    const nvfp4_buffer * x,
+    nvfp4_buffer * dst,
+    int row_tile,
+    int k_tile,
+    int decode_kind);
+
 NVFP4_API nvfp4_status fp8_matrix_upload(
     nvfp4_runtime * runtime,
     const uint8_t * weights_e4m3,

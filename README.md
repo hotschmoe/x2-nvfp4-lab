@@ -54,10 +54,16 @@ Current highlights on an Adreno X2-90:
   events. Dense quantized linears consume **95.3%** of kernel time; same-shape
   NVFP4 and FP8 MLP layers both take about 5.13 ms, isolating NVFP4 decode
   efficiency as the primary dense target.
+- A correctness-gated 350-treatment kernel sweep now verifies that the best
+  decode structure is shape-specific. Repeated dense winners reach about
+  **45 GB/s** and cut isolated gate/up/down GEMV latency by **24-25%**; the MoE
+  LM head improves **1.225x**. Explicit vector decode loses on the large shapes.
 - Independent CPU/GPU tensor oracles and isolated-process accelerator gates.
 
 Start with [CAMPAIGN_BANDWIDTH_FIRST.md](CAMPAIGN_BANDWIDTH_FIRST.md) and
-[UNIFIED_MEMORY_RESEARCH.md](UNIFIED_MEMORY_RESEARCH.md). Reproduce the current
+[UNIFIED_MEMORY_RESEARCH.md](UNIFIED_MEMORY_RESEARCH.md). The current kernel
+hypotheses and verified shape sweep are in
+[NVFP4_KERNEL_LAB.md](NVFP4_KERNEL_LAB.md). Reproduce the current
 bandwidth sprint with:
 
 ```powershell

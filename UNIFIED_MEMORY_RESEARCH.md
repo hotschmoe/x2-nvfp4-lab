@@ -563,10 +563,11 @@ Prioritized next questions, including work not yet performed:
    eight FP8 MLP layers. Extend the same trace ID through tokenizer, request
    queueing, embedding gather/upload, logits transfer, sampling, detokenization,
    and SSE, then add hardware memory/cache/occupancy counters.
-3. **NVFP4 decode and MoE fusion.** Same-shape dense NVFP4 and FP8 MLPs both
-   take about 5.13 ms/layer, proving the compressed path is instruction limited.
-   Tune packed/scale loads and output tiling, especially the 18.52 GB/s expert
-   down path; compare fused SiLU/down/shared reduction and replace the current
+3. **NVFP4 decode and MoE fusion.** The first 350-treatment hardware sweep now
+   proves output tiling is shape-specific: dense reaches about 45 GB/s at
+   r16/k8192, the head reaches 40.86 GB/s at r8/k2048-4096, and expert down
+   remains at 23.44 GB/s near r4/k512. Promote and full-model A/B these winners;
+   then compare fused SiLU/down/shared reduction and replace the current
    4.137 ms/token top-8 sequence with a fused router/selection design.
 4. **Atlas kernel and graph structure.** Audit its open-source Qwen3.5/GB10 MoE,
    recurrent-layer, paged-KV, CUDA-graph, and MTP paths for reusable scheduling
@@ -594,9 +595,14 @@ Prioritized next questions, including work not yet performed:
    acceptance-correct MTP device graph behind independent memory, correctness,
    and latency gates. Measure accepted MTP tokens per expensive main-model
    weight stream before enabling it by default.
-10. **NPU registered memory.** Measure whether QAIRT/QNN can consume a registered
-   view of the same underlying allocation, its dispatch floor, and contention
-   with Adreno and Oryon before assigning it any production work.
+10. **Hybrid island pipelines.** Measure whether QAIRT/QNN can consume a
+   registered view of the same underlying allocation, its dispatch floor, and
+   contention with Adreno and Oryon. Test an explicitly double-buffered
+   NPU-dequantize/GPU-dot pipeline (and the inverse/full-op alternatives): while
+   Adreno consumes tile N, Hexagon prepares tile N+1. Count expanded bytes,
+   cache/coherence transitions, synchronization, overlap, energy, and total
+   token latency. Keep the split only if measured end-to-end savings exceed the
+   dequant expansion and cross-runtime handoff cost.
 11. **Sustained thermal behavior and counters.** Add cooldown/sustained protocols
    and obtain Qualcomm compiler/occupancy/memory-counter evidence so the gap
    between 34.22 GB/s useful NVFP4 delivery and the 129 GB/s raw ceiling can be
@@ -676,3 +682,6 @@ OpenCL/SVM-native; CUDA pointer tables and graph capture are not portable here.
 - [Khronos OpenCL buffer creation](https://registry.khronos.org/OpenCL/specs/unified/refpages/man/html/clCreateBuffer.html)
 - [Qualcomm Snapdragon X2 Elite product brief](https://www.qualcomm.com/content/dam/qcomm-martech/dm-assets/documents/Snapdragon-X2-Elite-Product-Brief.pdf)
 - [Qualcomm OpenCL programming and optimization guide](https://docs.qualcomm.com/bundle/publicresource/80-NB295-11_REV_C_Qualcomm_Snapdragon_Mobile_Platform_Opencl_General_Programming_and_Optimization.pdf)
+- [Qualcomm Adreno matrix multiply optimization](https://www.qualcomm.com/news/onq/2016/10/matrix-multiply-adreno-gpus-part-1-opencl-optimization)
+- [Qualcomm Adreno memory optimization](https://www.qualcomm.com/news/onq/2016/06/better-opencl-performance-qualcomm-adreno-gpu-memory-optimization)
+- [Khronos OpenCL C specification](https://registry.khronos.org/OpenCL/specs/unified/html/OpenCL_C.html)

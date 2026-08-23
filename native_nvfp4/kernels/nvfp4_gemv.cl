@@ -217,6 +217,241 @@ kernel void nvfp4_native_gemv_rows_tiled(
     }
 }
 
+// Kernel-lab entry points. These intentionally leave the production decode
+// kernel unchanged while allowing the host to sweep activation-tile width and
+// the number of rows sharing each tile on the actual device. The two entry
+// points differ only in the inner 16-value NVFP4 block implementation.
+static inline float nvfp4_lab_block_scalar(
+    global const uchar * q,
+    local const float * xv,
+    float d
+) {
+    float sum = 0.0f;
+    #pragma unroll
+    for (int j = 0; j < QK_NVFP4_SUB/2; ++j) {
+        const uchar qv = q[j];
+        sum += d*xv[2*j]*kvalues_nvfp4_f[qv & 0x0F];
+        sum += d*xv[2*j + 1]*kvalues_nvfp4_f[qv >> 4];
+    }
+    return sum;
+}
+
+static inline float nvfp4_lab_block_vector(
+    global const uchar * q,
+    local const float * xv,
+    float d
+) {
+    const uchar8 qv = vload8(0, q);
+    const float8 x0 = vload8(0, xv);
+    const float8 x1 = vload8(1, xv);
+    const float8 low = (float8)(
+        kvalues_nvfp4_f[qv.s0 & 0x0F], kvalues_nvfp4_f[qv.s1 & 0x0F],
+        kvalues_nvfp4_f[qv.s2 & 0x0F], kvalues_nvfp4_f[qv.s3 & 0x0F],
+        kvalues_nvfp4_f[qv.s4 & 0x0F], kvalues_nvfp4_f[qv.s5 & 0x0F],
+        kvalues_nvfp4_f[qv.s6 & 0x0F], kvalues_nvfp4_f[qv.s7 & 0x0F]);
+    const float8 high = (float8)(
+        kvalues_nvfp4_f[qv.s0 >> 4], kvalues_nvfp4_f[qv.s1 >> 4],
+        kvalues_nvfp4_f[qv.s2 >> 4], kvalues_nvfp4_f[qv.s3 >> 4],
+        kvalues_nvfp4_f[qv.s4 >> 4], kvalues_nvfp4_f[qv.s5 >> 4],
+        kvalues_nvfp4_f[qv.s6 >> 4], kvalues_nvfp4_f[qv.s7 >> 4]);
+    const float8 even_x = (float8)(
+        x0.s0, x0.s2, x0.s4, x0.s6, x1.s0, x1.s2, x1.s4, x1.s6);
+    const float8 odd_x = (float8)(
+        x0.s1, x0.s3, x0.s5, x0.s7, x1.s1, x1.s3, x1.s5, x1.s7);
+    return d*(dot(even_x.lo, low.lo) + dot(even_x.hi, low.hi) +
+              dot(odd_x.lo, high.lo) + dot(odd_x.hi, high.hi));
+}
+
+static inline void nvfp4_native_gemv_rows_lab_impl(
+    global const uchar * packed,
+    global const uchar * scales,
+    global const float * x,
+    global float * dst,
+    int cols,
+    int rows,
+    float inv_weight_global_scale,
+    int k_tile,
+    local float * x_tile,
+    int vector_decode
+) {
+    const int subgroup = get_sub_group_id();
+    const int row_tile = get_num_sub_groups();
+    const int lane = get_sub_group_local_id();
+    const int row = get_group_id(0)*row_tile + subgroup;
+    const int local_thread = get_local_id(0);
+    const int packed_stride = cols/2;
+    const int scale_stride = cols/QK_NVFP4_SUB;
+    const int safe_row = row < rows ? row : 0;
+    global const uchar * wr = packed + safe_row*packed_stride;
+    global const uchar * sr = scales + safe_row*scale_stride;
+    float sum = 0.0f;
+
+    for (int tile_base = 0; tile_base < cols; tile_base += k_tile) {
+        const int tile_cols = min(k_tile, cols - tile_base);
+        for (int i = local_thread; i < tile_cols;
+             i += NVFP4_SUBGROUP_WIDTH*row_tile) {
+            x_tile[i] = x[tile_base + i];
+        }
+        barrier(CLK_LOCAL_MEM_FENCE);
+
+        const int tile_blocks = tile_cols/QK_NVFP4_SUB;
+        for (int tile_block = lane; tile_block < tile_blocks;
+             tile_block += NVFP4_SUBGROUP_WIDTH) {
+            const int block = tile_base/QK_NVFP4_SUB + tile_block;
+            if (row < rows && block < scale_stride) {
+                const float d = e4m3_scale_to_fp32(sr[block]) *
+                    inv_weight_global_scale;
+                global const uchar * q = wr + block*(QK_NVFP4_SUB/2);
+                local const float * xv = x_tile + tile_block*QK_NVFP4_SUB;
+                sum += vector_decode
+                    ? nvfp4_lab_block_vector(q, xv, d)
+                    : nvfp4_lab_block_scalar(q, xv, d);
+            }
+        }
+        barrier(CLK_LOCAL_MEM_FENCE);
+    }
+
+    sum = sub_group_reduce_add(sum);
+    if (row < rows && lane == 0) {
+        dst[row] = sum;
+    }
+}
+
+__attribute__((qcom_reqd_sub_group_size("half")))
+kernel void nvfp4_native_gemv_rows_lab_scalar(
+    global const uchar * packed,
+    global const uchar * scales,
+    global const float * x,
+    global float * dst,
+    int cols,
+    int rows,
+    float inv_weight_global_scale,
+    int k_tile,
+    local float * x_tile
+) {
+    nvfp4_native_gemv_rows_lab_impl(
+        packed, scales, x, dst, cols, rows, inv_weight_global_scale,
+        k_tile, x_tile, 0);
+}
+
+__attribute__((qcom_reqd_sub_group_size("half")))
+kernel void nvfp4_native_gemv_rows_lab_vector(
+    global const uchar * packed,
+    global const uchar * scales,
+    global const float * x,
+    global float * dst,
+    int cols,
+    int rows,
+    float inv_weight_global_scale,
+    int k_tile,
+    local float * x_tile
+) {
+    nvfp4_native_gemv_rows_lab_impl(
+        packed, scales, x, dst, cols, rows, inv_weight_global_scale,
+        k_tile, x_tile, 1);
+}
+
+static inline float nvfp4_lab_block_vector_global(
+    global const uchar * q,
+    global const float * xv,
+    float d
+) {
+    const uchar8 qv = vload8(0, q);
+    const float8 x0 = vload8(0, xv);
+    const float8 x1 = vload8(1, xv);
+    const float8 low = (float8)(
+        kvalues_nvfp4_f[qv.s0 & 0x0F], kvalues_nvfp4_f[qv.s1 & 0x0F],
+        kvalues_nvfp4_f[qv.s2 & 0x0F], kvalues_nvfp4_f[qv.s3 & 0x0F],
+        kvalues_nvfp4_f[qv.s4 & 0x0F], kvalues_nvfp4_f[qv.s5 & 0x0F],
+        kvalues_nvfp4_f[qv.s6 & 0x0F], kvalues_nvfp4_f[qv.s7 & 0x0F]);
+    const float8 high = (float8)(
+        kvalues_nvfp4_f[qv.s0 >> 4], kvalues_nvfp4_f[qv.s1 >> 4],
+        kvalues_nvfp4_f[qv.s2 >> 4], kvalues_nvfp4_f[qv.s3 >> 4],
+        kvalues_nvfp4_f[qv.s4 >> 4], kvalues_nvfp4_f[qv.s5 >> 4],
+        kvalues_nvfp4_f[qv.s6 >> 4], kvalues_nvfp4_f[qv.s7 >> 4]);
+    const float8 even_x = (float8)(
+        x0.s0, x0.s2, x0.s4, x0.s6, x1.s0, x1.s2, x1.s4, x1.s6);
+    const float8 odd_x = (float8)(
+        x0.s1, x0.s3, x0.s5, x0.s7, x1.s1, x1.s3, x1.s5, x1.s7);
+    return d*(dot(even_x.lo, low.lo) + dot(even_x.hi, low.hi) +
+              dot(odd_x.lo, high.lo) + dot(odd_x.hi, high.hi));
+}
+
+static inline void nvfp4_native_gemv_rows_lab_direct_impl(
+    global const uchar * packed,
+    global const uchar * scales,
+    global const float * x,
+    global float * dst,
+    int cols,
+    int rows,
+    float inv_weight_global_scale,
+    int vector_decode
+) {
+    const int subgroup = get_sub_group_id();
+    const int row_tile = get_num_sub_groups();
+    const int lane = get_sub_group_local_id();
+    const int row = get_group_id(0)*row_tile + subgroup;
+    if (row >= rows) {
+        return;
+    }
+    const int packed_stride = cols/2;
+    const int scale_stride = cols/QK_NVFP4_SUB;
+    global const uchar * wr = packed + row*packed_stride;
+    global const uchar * sr = scales + row*scale_stride;
+    float sum = 0.0f;
+
+    for (int block = lane; block < scale_stride;
+         block += NVFP4_SUBGROUP_WIDTH) {
+        const float d = e4m3_scale_to_fp32(sr[block]) *
+            inv_weight_global_scale;
+        global const uchar * q = wr + block*(QK_NVFP4_SUB/2);
+        global const float * xv = x + block*QK_NVFP4_SUB;
+        if (vector_decode) {
+            sum += nvfp4_lab_block_vector_global(q, xv, d);
+        } else {
+            #pragma unroll
+            for (int j = 0; j < QK_NVFP4_SUB/2; ++j) {
+                const uchar qv = q[j];
+                sum += d*xv[2*j]*kvalues_nvfp4_f[qv & 0x0F];
+                sum += d*xv[2*j + 1]*kvalues_nvfp4_f[qv >> 4];
+            }
+        }
+    }
+
+    sum = sub_group_reduce_add(sum);
+    if (lane == 0) {
+        dst[row] = sum;
+    }
+}
+
+__attribute__((qcom_reqd_sub_group_size("half")))
+kernel void nvfp4_native_gemv_rows_lab_direct_scalar(
+    global const uchar * packed,
+    global const uchar * scales,
+    global const float * x,
+    global float * dst,
+    int cols,
+    int rows,
+    float inv_weight_global_scale
+) {
+    nvfp4_native_gemv_rows_lab_direct_impl(
+        packed, scales, x, dst, cols, rows, inv_weight_global_scale, 0);
+}
+
+__attribute__((qcom_reqd_sub_group_size("half")))
+kernel void nvfp4_native_gemv_rows_lab_direct_vector(
+    global const uchar * packed,
+    global const uchar * scales,
+    global const float * x,
+    global float * dst,
+    int cols,
+    int rows,
+    float inv_weight_global_scale
+) {
+    nvfp4_native_gemv_rows_lab_direct_impl(
+        packed, scales, x, dst, cols, rows, inv_weight_global_scale, 1);
+}
+
 // Correctness-first subgroup prefill path. It gives every (vector,row) pair a
 // subgroup and deliberately does not tile across vectors yet. That separates
 // subgroup reduction correctness from the later weight-reuse optimization.

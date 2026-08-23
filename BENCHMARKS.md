@@ -829,3 +829,27 @@ Canonical artifacts:
 
 - `20260823-052018-140022-dense-full-model-trace.json`
 - `20260823-052128-636267-moe-full-model-trace.json`
+
+## Correctness-gated NVFP4 GEMV structure sweep
+
+The experimental lab keeps production dispatch unchanged and sweeps local versus
+direct-global activation access, scalar-unrolled versus explicit vector decode,
+1/2/4/8/16 output-row subgroups, and 256-8192-element K tiles. It uses complete
+real checkpoint matrices and rejects a treatment before timing if it differs
+from the production output beyond `rtol=5e-5, atol=5e-5`.
+
+Two runs in opposite shape order reproduced the winners. Each run accepted all
+350 candidate/shape combinations.
+
+| Shape | Repeated best kernel | Median | Speedup | Logical bandwidth |
+|---|---|---:|---:|---:|
+| dense gate/up 17408x5120 | local scalar r16/k8192 | 1.117 ms | 1.310x | 44.95 GB/s |
+| dense down 5120x17408 | local scalar r16/k8192 | 1.113 ms | 1.322x | 45.14 GB/s |
+| expert gate/up 512x2048 | local scalar r16/k2048 | 0.0171 ms | 1.538x | 35.09 GB/s |
+| expert down 2048x512 | local scalar r4/k512 | 0.0256 ms | 1.113x | 23.44 GB/s |
+| LM head 248320x2048 | local scalar r8/k4096 | 7.025 ms | 1.225x | 40.86 GB/s |
+
+These are isolated kernel results. The dense projection gains project to about
+68 ms less work in the current 515 ms full-token trace, but only a full-model A/B
+can turn that estimate into a throughput claim. Method, controls, both artifacts,
+and the next experiment matrix are documented in `NVFP4_KERNEL_LAB.md`.

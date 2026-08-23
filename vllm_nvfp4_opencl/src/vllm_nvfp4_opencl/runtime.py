@@ -537,6 +537,16 @@ class Runtime:
             self.lib.nvfp4_linear_device_f32.argtypes
         )
         self.lib.nvfp4_linear_device_enqueue_f32.restype = C.c_int
+        self.lib.nvfp4_linear_device_lab_f32.argtypes = [
+            C.c_void_p,
+            C.c_void_p,
+            C.c_void_p,
+            C.c_void_p,
+            C.c_int,
+            C.c_int,
+            C.c_int,
+        ]
+        self.lib.nvfp4_linear_device_lab_f32.restype = C.c_int
         self.lib.fp8_matrix_upload.argtypes = [
             C.c_void_p,
             C.c_void_p,
@@ -1134,6 +1144,40 @@ class Runtime:
                     kind,
                 ),
                 "linear_device_enqueue_f32" if enqueue else "linear_device_f32",
+            )
+        except Exception:
+            if out is None:
+                output.close()
+            raise
+        return output
+
+    def linear_device_lab(
+        self,
+        matrix: NativeMatrix,
+        x: DeviceBuffer,
+        *,
+        row_tile: int,
+        k_tile: int,
+        decode_kind: int,
+        out: DeviceBuffer | None = None,
+    ) -> DeviceBuffer:
+        """Run one synchronous, decode-only experimental kernel."""
+        output_bytes = matrix.rows * np.dtype(np.float32).itemsize
+        output = out if out is not None else self.create_buffer(output_bytes)
+        if output.bytes < output_bytes:
+            raise ValueError("output device buffer is too small")
+        try:
+            self._check(
+                self.lib.nvfp4_linear_device_lab_f32(
+                    self.handle,
+                    matrix.handle,
+                    x.handle,
+                    output.handle,
+                    row_tile,
+                    k_tile,
+                    decode_kind,
+                ),
+                "linear_device_lab_f32",
             )
         except Exception:
             if out is None:
