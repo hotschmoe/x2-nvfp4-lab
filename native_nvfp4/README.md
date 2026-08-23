@@ -100,6 +100,12 @@ scripts/run-isolated.ps1 -Executable $python -TimeoutSeconds 300 `
 scripts/run-isolated.ps1 -Executable $python -TimeoutSeconds 300 `
   -CompletionMarker 'MOE_NVFP4_BANK_RESIDENCY_PASS' `
   -CommandLine '-3 native_nvfp4/bench_moe_bank_residency.py --gates 3,5,10,19'
+
+# Metadata-only checkpoint ledger and KV/recurrent-state residency scenarios
+python native_nvfp4/inventory_checkpoint_memory.py `
+  models/Ornith-1.5-35B-A3B-NVFP4 `
+  models/Qwen3.8-27B-NVFP4-Unsloth `
+  --output campaign_results/bandwidth-first/checkpoint-memory-inventory.json
 ```
 
 The scalar GEMV/GEMM kernels assign one work-item to each output row/vector pair

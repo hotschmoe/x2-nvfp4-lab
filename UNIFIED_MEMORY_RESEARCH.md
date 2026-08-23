@@ -564,11 +564,10 @@ Prioritized next questions, including work not yet performed:
    admission, prefix reuse, continuous batching, cancellation, structured
    output, and coding-client compatibility. Backend replacement is not useful
    before this common native boundary exists.
-5. **Memory pressure beyond 8 GiB.** The real 1/2/4/8 GiB-class SVM ladder now
-   passes through 19 banks/8.64 GB and releases 8.54 GB immediately. Before the
-   next gate, inventory every non-expert tensor, KV/recurrent-state budget,
-   scratch allocation, and Windows/device reserve; then determine whether an
-   elastic layer or expert cache is necessary.
+5. **Memory pressure beyond 8 GiB.** The real 1/2/4/8 GiB-class SVM ladder passes
+   through 19 banks/8.64 GB and releases 8.54 GB immediately. The exact
+   checkpoint/state inventory is now complete; next execute 24/30/35/40-bank
+   gates while adding non-expert weights and serving state in policy order.
 6. **Expert residency policy.** Measure per-layer routing locality over real
    coding traces, determine whether all 256 experts fit inside the safe OpenCL
    budget, and compare full residency, layer streaming, and frequency-aware
@@ -597,6 +596,37 @@ at once (8,640,331,776 bytes), validated each routed output, and observed
 memory at the maximum gate remained 30.70 GB. This establishes a safe current
 gate, not a full-model guarantee, because the experiment deliberately excluded
 all non-expert resident tensors and serving state.
+
+## Exact residency policy derived from both checkpoints
+
+The metadata-only ledger in
+`campaign_results/bandwidth-first/checkpoint-memory-inventory.json` classifies
+all 94,393 MoE tensors and all 1,968 dense/MTP tensors. The important result is
+that checkpoint file size is not the device working set:
+
+- omit the 0.83-0.86 GiB vision tower for a coding-only endpoint;
+- omit the 0.79-1.57 GiB MTP graph until speculative decode is implemented;
+- memory-map token embeddings and gather a single row on CPU, avoiding eager
+  residency of 0.95 GiB (MoE) or 2.37 GiB (dense);
+- keep all remaining text compute weights in their checkpoint precision;
+- reserve 2 GiB below OpenCL's reported 23.81 GiB for allocator behavior and
+  activation/scheduler scratch not yet measured.
+
+This yields 18.448 GiB of planned resident compute weights for MoE and
+17.792 GiB for dense. With the runtime's current FP32 caches, use 32K context for
+MoE and 16K for dense during the full-load qualification. Do not enable the
+numerically possible MoE 64K cell yet: it leaves only 0.794 GiB beyond the 2 GiB
+reserve and full residency has not passed. BF16 KV is the next target, enabling
+dense 32K with 1.860 GiB beyond the reserve and MoE 64K with 2.044 GiB. FP8 KV
+must pass an end-to-end long-context quality gate before it can unlock dense
+64K or higher concurrency.
+
+This policy borrows MLX's useful lifetime principle rather than its API: keep
+locationless/lazy data such as embeddings from being eagerly materialized, and
+evaluate the sequential decoder with reusable workspace. It also follows the
+Spark runtimes' practical separation between a scheduler/control plane and a
+hardware-specific weight/KV allocator. The Snapdragon implementation remains
+OpenCL/SVM-native; CUDA pointer tables and graph capture are not portable here.
 
 ## Research sources
 

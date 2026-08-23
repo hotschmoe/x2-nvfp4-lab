@@ -580,6 +580,7 @@ Reproduction entry points:
 - `native_nvfp4/bench_moe_routed_layer.py`
 - `native_nvfp4/bench_moe_device_bank.py`
 - `native_nvfp4/bench_moe_bank_residency.py`
+- `native_nvfp4/inventory_checkpoint_memory.py`
 - `campaign_results/bandwidth-first/*.json`
 - `logs/20260822-194606-767.stdout.log` (complete SVM MLP)
 - `logs/20260822-194623-106.stdout.log` (complete SVM decoder layer)

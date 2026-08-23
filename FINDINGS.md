@@ -225,6 +225,21 @@ Closing the 19 banks recovered 8.54 GB immediately. This completes the planned
 1/2/4/8 GiB safety ladder, but the remaining full-model budget is still too
 tight to skip explicit non-expert, KV, scratch, and Windows headroom accounting.
 
+That accounting is now exact at the tensor-metadata level. The 35B MoE contains
+21.800 GiB of tensor payload: 18.448 GiB of resident text compute weights under
+the proposed policy, a 0.947 GiB embedding kept lazy on CPU, 0.832 GiB of
+optional vision, and 1.573 GiB of optional BF16 MTP. The dense 27B contains
+21.809 GiB: 17.792 GiB resident text compute weights, a 2.368 GiB lazy embedding,
+0.858 GiB vision, and 0.791 GiB MTP. No tensor is unclassified.
+
+With current FP32 state, the model-derived recurrent/conv/known-scratch cost is
+67.9 MiB per 35B request and 159.9 MiB per dense request. FP32 KV costs 1.25 GiB
+per 32K request for MoE but 4.00 GiB for dense because it has 16 full-attention
+layers and four KV heads. Against the observed 23.81 GiB OpenCL budget and a
+2 GiB safety reserve, 35B 32K fits with 2.04 GiB additional headroom. Dense 32K
+misses the policy by 0.14 GiB; dense 16K FP32 or dense 32K BF16 are the safe
+initial choices. These are planned allocations, not a full-load pass.
+
 ## First decoder benchmarks
 
 Direct row-scaled FP8 kernels now accompany NVFP4 in the persistent runtime. A

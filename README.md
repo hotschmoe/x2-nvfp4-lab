@@ -22,6 +22,9 @@ Current highlights on an Adreno X2-90:
   host routing boundary; one complete layer bank occupies 454.8 MB.
 - Real cumulative residency passes at 1.36/2.27/4.55/8.64 GB across 3/5/10/19
   expert banks; all layers pass and closing recovers 8.54 GB immediately.
+- Metadata-exact memory plans cover every tensor in both checkpoints. The first
+  coding-service policy omits vision/MTP, keeps embedding lookup lazy on CPU,
+  and retains a 2 GiB OpenCL safety reserve.
 - Independent CPU/GPU tensor oracles and isolated-process accelerator gates.
 
 Start with [CAMPAIGN_BANDWIDTH_FIRST.md](CAMPAIGN_BANDWIDTH_FIRST.md) and

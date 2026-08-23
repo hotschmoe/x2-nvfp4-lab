@@ -1,0 +1,1223 @@
+{
+  "models": [
+    {
+      "model_dir": "models\\Ornith-1.5-35B-A3B-NVFP4",
+      "tensor_count": 94393,
+      "tensor_bytes": 23407457492,
+      "safetensors_file_bytes": 23420417532,
+      "by_category": {
+        "optional_mtp": {
+          "tensors": 785,
+          "bytes": 1689281536
+        },
+        "optional_vision": {
+          "tensors": 333,
+          "bytes": 893142496
+        },
+        "text_embedding": {
+          "tensors": 1,
+          "bytes": 1017118720
+        },
+        "text_full_attention": {
+          "tensors": 140,
+          "bytes": 272640320
+        },
+        "text_linear_attention": {
+          "tensors": 450,
+          "bytes": 1016475600
+        },
+        "text_lm_head": {
+          "tensors": 3,
+          "bytes": 286064644
+        },
+        "text_moe_routed_experts": {
+          "tensors": 92160,
+          "bytes": 18119516160
+        },
+        "text_moe_router": {
+          "tensors": 80,
+          "bytes": 42106880
+        },
+        "text_moe_shared_expert": {
+          "tensors": 360,
+          "bytes": 70779360
+        },
+        "text_norm": {
+          "tensors": 81,
+          "bytes": 331776
+        }
+      },
+      "by_dtype": {
+        "BF16": {
+          "tensors": 1480,
+          "bytes": 3651833568
+        },
+        "F32": {
+          "tensors": 31101,
+          "bytes": 124404
+        },
+        "F8_E4M3": {
+          "tensors": 30971,
+          "bytes": 3332177920
+        },
+        "U8": {
+          "tensors": 30841,
+          "bytes": 16423321600
+        }
+      },
+      "by_storage": {
+        "bf16": {
+          "tensors": 1480,
+          "bytes": 3651833568
+        },
+        "f32": {
+          "tensors": 130,
+          "bytes": 520
+        },
+        "fp8_weight": {
+          "tensors": 130,
+          "bytes": 1279262720
+        },
+        "nvfp4_block_scale": {
+          "tensors": 30841,
+          "bytes": 2052915200
+        },
+        "nvfp4_packed": {
+          "tensors": 30841,
+          "bytes": 16423321600
+        },
+        "quant_scalar": {
+          "tensors": 30971,
+          "bytes": 123884
+        }
+      },
+      "by_file": {
+        "model-00001-of-00003.safetensors": {
+          "tensors": 38909,
+          "tensor_bytes": 9999888988,
+          "file_bytes": 10005227452,
+          "container_overhead_bytes": 5338464
+        },
+        "model-00002-of-00003.safetensors": {
+          "tensors": 47710,
+          "tensor_bytes": 9994966160,
+          "file_bytes": 10001532968,
+          "container_overhead_bytes": 6566808
+        },
+        "model-00003-of-00003.safetensors": {
+          "tensors": 7774,
+          "tensor_bytes": 3412602344,
+          "file_bytes": 3413657112,
+          "container_overhead_bytes": 1054768
+        }
+      },
+      "unclassified": [],
+      "profile": {
+        "hidden_size": 2048,
+        "layers": 40,
+        "full_attention_layers": 10,
+        "linear_attention_layers": 30,
+        "attention_heads": 16,
+        "kv_heads": 2,
+        "head_dim": 256,
+        "linear_key_heads": 16,
+        "linear_value_heads": 32,
+        "linear_key_head_dim": 128,
+        "linear_value_head_dim": 128,
+        "linear_conv_kernel_dim": 4,
+        "experts": 256,
+        "experts_per_token": 8
+      },
+      "state_budgets": [
+        {
+          "context_tokens": 16384,
+          "concurrency": 1,
+          "kv_fp32_bytes": 671088640,
+          "kv_bf16_bytes": 335544320,
+          "kv_fp8_bytes": 167772160,
+          "gated_delta_fp32_bytes": 62914560,
+          "causal_conv_fp32_bytes": 3932160,
+          "paged_block_tables_bytes": 40960,
+          "attention_query_gate_scratch_bytes": 327680,
+          "current_runtime_extra_conv_weight_bytes": 3932160
+        },
+        {
+          "context_tokens": 32768,
+          "concurrency": 1,
+          "kv_fp32_bytes": 1342177280,
+          "kv_bf16_bytes": 671088640,
+          "kv_fp8_bytes": 335544320,
+          "gated_delta_fp32_bytes": 62914560,
+          "causal_conv_fp32_bytes": 3932160,
+          "paged_block_tables_bytes": 81920,
+          "attention_query_gate_scratch_bytes": 327680,
+          "current_runtime_extra_conv_weight_bytes": 3932160
+        },
+        {
+          "context_tokens": 65536,
+          "concurrency": 1,
+          "kv_fp32_bytes": 2684354560,
+          "kv_bf16_bytes": 1342177280,
+          "kv_fp8_bytes": 671088640,
+          "gated_delta_fp32_bytes": 62914560,
+          "causal_conv_fp32_bytes": 3932160,
+          "paged_block_tables_bytes": 163840,
+          "attention_query_gate_scratch_bytes": 327680,
+          "current_runtime_extra_conv_weight_bytes": 3932160
+        },
+        {
+          "context_tokens": 131072,
+          "concurrency": 1,
+          "kv_fp32_bytes": 5368709120,
+          "kv_bf16_bytes": 2684354560,
+          "kv_fp8_bytes": 1342177280,
+          "gated_delta_fp32_bytes": 62914560,
+          "causal_conv_fp32_bytes": 3932160,
+          "paged_block_tables_bytes": 327680,
+          "attention_query_gate_scratch_bytes": 327680,
+          "current_runtime_extra_conv_weight_bytes": 3932160
+        },
+        {
+          "context_tokens": 16384,
+          "concurrency": 2,
+          "kv_fp32_bytes": 1342177280,
+          "kv_bf16_bytes": 671088640,
+          "kv_fp8_bytes": 335544320,
+          "gated_delta_fp32_bytes": 125829120,
+          "causal_conv_fp32_bytes": 7864320,
+          "paged_block_tables_bytes": 81920,
+          "attention_query_gate_scratch_bytes": 655360,
+          "current_runtime_extra_conv_weight_bytes": 7864320
+        },
+        {
+          "context_tokens": 32768,
+          "concurrency": 2,
+          "kv_fp32_bytes": 2684354560,
+          "kv_bf16_bytes": 1342177280,
+          "kv_fp8_bytes": 671088640,
+          "gated_delta_fp32_bytes": 125829120,
+          "causal_conv_fp32_bytes": 7864320,
+          "paged_block_tables_bytes": 163840,
+          "attention_query_gate_scratch_bytes": 655360,
+          "current_runtime_extra_conv_weight_bytes": 7864320
+        },
+        {
+          "context_tokens": 65536,
+          "concurrency": 2,
+          "kv_fp32_bytes": 5368709120,
+          "kv_bf16_bytes": 2684354560,
+          "kv_fp8_bytes": 1342177280,
+          "gated_delta_fp32_bytes": 125829120,
+          "causal_conv_fp32_bytes": 7864320,
+          "paged_block_tables_bytes": 327680,
+          "attention_query_gate_scratch_bytes": 655360,
+          "current_runtime_extra_conv_weight_bytes": 7864320
+        },
+        {
+          "context_tokens": 131072,
+          "concurrency": 2,
+          "kv_fp32_bytes": 10737418240,
+          "kv_bf16_bytes": 5368709120,
+          "kv_fp8_bytes": 2684354560,
+          "gated_delta_fp32_bytes": 125829120,
+          "causal_conv_fp32_bytes": 7864320,
+          "paged_block_tables_bytes": 655360,
+          "attention_query_gate_scratch_bytes": 655360,
+          "current_runtime_extra_conv_weight_bytes": 7864320
+        },
+        {
+          "context_tokens": 16384,
+          "concurrency": 4,
+          "kv_fp32_bytes": 2684354560,
+          "kv_bf16_bytes": 1342177280,
+          "kv_fp8_bytes": 671088640,
+          "gated_delta_fp32_bytes": 251658240,
+          "causal_conv_fp32_bytes": 15728640,
+          "paged_block_tables_bytes": 163840,
+          "attention_query_gate_scratch_bytes": 1310720,
+          "current_runtime_extra_conv_weight_bytes": 15728640
+        },
+        {
+          "context_tokens": 32768,
+          "concurrency": 4,
+          "kv_fp32_bytes": 5368709120,
+          "kv_bf16_bytes": 2684354560,
+          "kv_fp8_bytes": 1342177280,
+          "gated_delta_fp32_bytes": 251658240,
+          "causal_conv_fp32_bytes": 15728640,
+          "paged_block_tables_bytes": 327680,
+          "attention_query_gate_scratch_bytes": 1310720,
+          "current_runtime_extra_conv_weight_bytes": 15728640
+        },
+        {
+          "context_tokens": 65536,
+          "concurrency": 4,
+          "kv_fp32_bytes": 10737418240,
+          "kv_bf16_bytes": 5368709120,
+          "kv_fp8_bytes": 2684354560,
+          "gated_delta_fp32_bytes": 251658240,
+          "causal_conv_fp32_bytes": 15728640,
+          "paged_block_tables_bytes": 655360,
+          "attention_query_gate_scratch_bytes": 1310720,
+          "current_runtime_extra_conv_weight_bytes": 15728640
+        },
+        {
+          "context_tokens": 131072,
+          "concurrency": 4,
+          "kv_fp32_bytes": 21474836480,
+          "kv_bf16_bytes": 10737418240,
+          "kv_fp8_bytes": 5368709120,
+          "gated_delta_fp32_bytes": 251658240,
+          "causal_conv_fp32_bytes": 15728640,
+          "paged_block_tables_bytes": 1310720,
+          "attention_query_gate_scratch_bytes": 1310720,
+          "current_runtime_extra_conv_weight_bytes": 15728640
+        }
+      ],
+      "residency_plan": {
+        "reported_opencl_global_budget_bytes": 25563234304,
+        "safety_reserve_bytes": 2147483648,
+        "resident_text_compute_weights_bytes": 19807914740,
+        "lazy_cpu_embedding_bytes": 1017118720,
+        "excluded_optional_vision_bytes": 893142496,
+        "excluded_optional_mtp_bytes": 1689281536,
+        "scenarios": [
+          {
+            "context_tokens": 16384,
+            "concurrency": 1,
+            "fixed_state_and_known_scratch_bytes": 71147520,
+            "kv_variants": {
+              "fp32": {
+                "known_runtime_bytes": 20550150900,
+                "headroom_before_reserve_bytes": 5013083404,
+                "headroom_after_reserve_bytes": 2865599756,
+                "fits_with_reserve": true
+              },
+              "bf16": {
+                "known_runtime_bytes": 20214606580,
+                "headroom_before_reserve_bytes": 5348627724,
+                "headroom_after_reserve_bytes": 3201144076,
+                "fits_with_reserve": true
+              },
+              "fp8": {
+                "known_runtime_bytes": 20046834420,
+                "headroom_before_reserve_bytes": 5516399884,
+                "headroom_after_reserve_bytes": 3368916236,
+                "fits_with_reserve": true
+              }
+            }
+          },
+          {
+            "context_tokens": 32768,
+            "concurrency": 1,
+            "fixed_state_and_known_scratch_bytes": 71188480,
+            "kv_variants": {
+              "fp32": {
+                "known_runtime_bytes": 21221280500,
+                "headroom_before_reserve_bytes": 4341953804,
+                "headroom_after_reserve_bytes": 2194470156,
+                "fits_with_reserve": true
+              },
+              "bf16": {
+                "known_runtime_bytes": 20550191860,
+                "headroom_before_reserve_bytes": 5013042444,
+                "headroom_after_reserve_bytes": 2865558796,
+                "fits_with_reserve": true
+              },
+              "fp8": {
+                "known_runtime_bytes": 20214647540,
+                "headroom_before_reserve_bytes": 5348586764,
+                "headroom_after_reserve_bytes": 3201103116,
+                "fits_with_reserve": true
+              }
+            }
+          },
+          {
+            "context_tokens": 65536,
+            "concurrency": 1,
+            "fixed_state_and_known_scratch_bytes": 71270400,
+            "kv_variants": {
+              "fp32": {
+                "known_runtime_bytes": 22563539700,
+                "headroom_before_reserve_bytes": 2999694604,
+                "headroom_after_reserve_bytes": 852210956,
+                "fits_with_reserve": true
+              },
+              "bf16": {
+                "known_runtime_bytes": 21221362420,
+                "headroom_before_reserve_bytes": 4341871884,
+                "headroom_after_reserve_bytes": 2194388236,
+                "fits_with_reserve": true
+              },
+              "fp8": {
+                "known_runtime_bytes": 20550273780,
+                "headroom_before_reserve_bytes": 5012960524,
+                "headroom_after_reserve_bytes": 2865476876,
+                "fits_with_reserve": true
+              }
+            }
+          },
+          {
+            "context_tokens": 131072,
+            "concurrency": 1,
+            "fixed_state_and_known_scratch_bytes": 71434240,
+            "kv_variants": {
+              "fp32": {
+                "known_runtime_bytes": 25248058100,
+                "headroom_before_reserve_bytes": 315176204,
+                "headroom_after_reserve_bytes": -1832307444,
+                "fits_with_reserve": false
+              },
+              "bf16": {
+                "known_runtime_bytes": 22563703540,
+                "headroom_before_reserve_bytes": 2999530764,
+                "headroom_after_reserve_bytes": 852047116,
+                "fits_with_reserve": true
+              },
+              "fp8": {
+                "known_runtime_bytes": 21221526260,
+                "headroom_before_reserve_bytes": 4341708044,
+                "headroom_after_reserve_bytes": 2194224396,
+                "fits_with_reserve": true
+              }
+            }
+          },
+          {
+            "context_tokens": 16384,
+            "concurrency": 2,
+            "fixed_state_and_known_scratch_bytes": 142295040,
+            "kv_variants": {
+              "fp32": {
+                "known_runtime_bytes": 21292387060,
+                "headroom_before_reserve_bytes": 4270847244,
+                "headroom_after_reserve_bytes": 2123363596,
+                "fits_with_reserve": true
+              },
+              "bf16": {
+                "known_runtime_bytes": 20621298420,
+                "headroom_before_reserve_bytes": 4941935884,
+                "headroom_after_reserve_bytes": 2794452236,
+                "fits_with_reserve": true
+              },
+              "fp8": {
+                "known_runtime_bytes": 20285754100,
+                "headroom_before_reserve_bytes": 5277480204,
+                "headroom_after_reserve_bytes": 3129996556,
+                "fits_with_reserve": true
+              }
+            }
+          },
+          {
+            "context_tokens": 32768,
+            "concurrency": 2,
+            "fixed_state_and_known_scratch_bytes": 142376960,
+            "kv_variants": {
+              "fp32": {
+                "known_runtime_bytes": 22634646260,
+                "headroom_before_reserve_bytes": 2928588044,
+                "headroom_after_reserve_bytes": 781104396,
+                "fits_with_reserve": true
+              },
+              "bf16": {
+                "known_runtime_bytes": 21292468980,
+                "headroom_before_reserve_bytes": 4270765324,
+                "headroom_after_reserve_bytes": 2123281676,
+                "fits_with_reserve": true
+              },
+              "fp8": {
+                "known_runtime_bytes": 20621380340,
+                "headroom_before_reserve_bytes": 4941853964,
+                "headroom_after_reserve_bytes": 2794370316,
+                "fits_with_reserve": true
+              }
+            }
+          },
+          {
+            "context_tokens": 65536,
+            "concurrency": 2,
+            "fixed_state_and_known_scratch_bytes": 142540800,
+            "kv_variants": {
+              "fp32": {
+                "known_runtime_bytes": 25319164660,
+                "headroom_before_reserve_bytes": 244069644,
+                "headroom_after_reserve_bytes": -1903414004,
+                "fits_with_reserve": false
+              },
+              "bf16": {
+                "known_runtime_bytes": 22634810100,
+                "headroom_before_reserve_bytes": 2928424204,
+                "headroom_after_reserve_bytes": 780940556,
+                "fits_with_reserve": true
+              },
+              "fp8": {
+                "known_runtime_bytes": 21292632820,
+                "headroom_before_reserve_bytes": 4270601484,
+                "headroom_after_reserve_bytes": 2123117836,
+                "fits_with_reserve": true
+              }
+            }
+          },
+          {
+            "context_tokens": 131072,
+            "concurrency": 2,
+            "fixed_state_and_known_scratch_bytes": 142868480,
+            "kv_variants": {
+              "fp32": {
+                "known_runtime_bytes": 30688201460,
+                "headroom_before_reserve_bytes": -5124967156,
+                "headroom_after_reserve_bytes": -7272450804,
+                "fits_with_reserve": false
+              },
+              "bf16": {
+                "known_runtime_bytes": 25319492340,
+                "headroom_before_reserve_bytes": 243741964,
+                "headroom_after_reserve_bytes": -1903741684,
+                "fits_with_reserve": false
+              },
+              "fp8": {
+                "known_runtime_bytes": 22635137780,
+                "headroom_before_reserve_bytes": 2928096524,
+                "headroom_after_reserve_bytes": 780612876,
+                "fits_with_reserve": true
+              }
+            }
+          },
+          {
+            "context_tokens": 16384,
+            "concurrency": 4,
+            "fixed_state_and_known_scratch_bytes": 284590080,
+            "kv_variants": {
+              "fp32": {
+                "known_runtime_bytes": 22776859380,
+                "headroom_before_reserve_bytes": 2786374924,
+                "headroom_after_reserve_bytes": 638891276,
+                "fits_with_reserve": true
+              },
+              "bf16": {
+                "known_runtime_bytes": 21434682100,
+                "headroom_before_reserve_bytes": 4128552204,
+                "headroom_after_reserve_bytes": 1981068556,
+                "fits_with_reserve": true
+              },
+              "fp8": {
+                "known_runtime_bytes": 20763593460,
+                "headroom_before_reserve_bytes": 4799640844,
+                "headroom_after_reserve_bytes": 2652157196,
+                "fits_with_reserve": true
+              }
+            }
+          },
+          {
+            "context_tokens": 32768,
+            "concurrency": 4,
+            "fixed_state_and_known_scratch_bytes": 284753920,
+            "kv_variants": {
+              "fp32": {
+                "known_runtime_bytes": 25461377780,
+                "headroom_before_reserve_bytes": 101856524,
+                "headroom_after_reserve_bytes": -2045627124,
+                "fits_with_reserve": false
+              },
+              "bf16": {
+                "known_runtime_bytes": 22777023220,
+                "headroom_before_reserve_bytes": 2786211084,
+                "headroom_after_reserve_bytes": 638727436,
+                "fits_with_reserve": true
+              },
+              "fp8": {
+                "known_runtime_bytes": 21434845940,
+                "headroom_before_reserve_bytes": 4128388364,
+                "headroom_after_reserve_bytes": 1980904716,
+                "fits_with_reserve": true
+              }
+            }
+          },
+          {
+            "context_tokens": 65536,
+            "concurrency": 4,
+            "fixed_state_and_known_scratch_bytes": 285081600,
+            "kv_variants": {
+              "fp32": {
+                "known_runtime_bytes": 30830414580,
+                "headroom_before_reserve_bytes": -5267180276,
+                "headroom_after_reserve_bytes": -7414663924,
+                "fits_with_reserve": false
+              },
+              "bf16": {
+                "known_runtime_bytes": 25461705460,
+                "headroom_before_reserve_bytes": 101528844,
+                "headroom_after_reserve_bytes": -2045954804,
+                "fits_with_reserve": false
+              },
+              "fp8": {
+                "known_runtime_bytes": 22777350900,
+                "headroom_before_reserve_bytes": 2785883404,
+                "headroom_after_reserve_bytes": 638399756,
+                "fits_with_reserve": true
+              }
+            }
+          },
+          {
+            "context_tokens": 131072,
+            "concurrency": 4,
+            "fixed_state_and_known_scratch_bytes": 285736960,
+            "kv_variants": {
+              "fp32": {
+                "known_runtime_bytes": 41568488180,
+                "headroom_before_reserve_bytes": -16005253876,
+                "headroom_after_reserve_bytes": -18152737524,
+                "fits_with_reserve": false
+              },
+              "bf16": {
+                "known_runtime_bytes": 30831069940,
+                "headroom_before_reserve_bytes": -5267835636,
+                "headroom_after_reserve_bytes": -7415319284,
+                "fits_with_reserve": false
+              },
+              "fp8": {
+                "known_runtime_bytes": 25462360820,
+                "headroom_before_reserve_bytes": 100873484,
+                "headroom_after_reserve_bytes": -2046610164,
+                "fits_with_reserve": false
+              }
+            }
+          }
+        ],
+        "qualification_policy": {
+          "load_categories": [
+            "text_full_attention",
+            "text_linear_attention",
+            "text_lm_head",
+            "text_moe_routed_experts",
+            "text_moe_router",
+            "text_moe_shared_expert",
+            "text_norm"
+          ],
+          "lazy_categories": [
+            "text_embedding"
+          ],
+          "excluded_categories": [
+            "optional_vision",
+            "optional_mtp"
+          ],
+          "current_kv_dtype": "fp32",
+          "current_context_tokens": 32768,
+          "current_max_concurrency": 1,
+          "next_kv_dtype": "bf16",
+          "next_context_tokens": 65536,
+          "moe_bank_gates": [
+            24,
+            30,
+            35,
+            40
+          ],
+          "admission_rule": "known runtime bytes + 2147483648 safety-reserve bytes must not exceed the reported OpenCL global budget; full-load qualification may lower the advertised context"
+        },
+        "assumptions": [
+          "embedding lookup stays memory-mapped on CPU and only touched rows enter the working set",
+          "all other text compute weights are resident in their checkpoint precision",
+          "vision and MTP are not loaded by the initial coding service",
+          "the reserve covers allocator overhead and model-wide activation/scheduler scratch not yet measured",
+          "current runtime causal-convolution objects duplicate FP32 conv weights per request"
+        ]
+      }
+    },
+    {
+      "model_dir": "models\\Qwen3.8-27B-NVFP4-Unsloth",
+      "tensor_count": 1968,
+      "tensor_bytes": 23417339744,
+      "safetensors_file_bytes": 23417592488,
+      "by_category": {
+        "optional_mtp": {
+          "tensors": 15,
+          "bytes": 849398784
+        },
+        "optional_vision": {
+          "tensors": 333,
+          "bytes": 921460192
+        },
+        "text_dense_mlp": {
+          "tensors": 720,
+          "bytes": 10562422080
+        },
+        "text_embedding": {
+          "tensors": 1,
+          "bytes": 2542796800
+        },
+        "text_full_attention": {
+          "tensors": 192,
+          "bytes": 1678360640
+        },
+        "text_linear_attention": {
+          "tensors": 576,
+          "bytes": 5589685248
+        },
+        "text_lm_head": {
+          "tensors": 2,
+          "bytes": 1271895040
+        },
+        "text_norm": {
+          "tensors": 129,
+          "bytes": 1320960
+        }
+      },
+      "by_dtype": {
+        "BF16": {
+          "tensors": 1063,
+          "bytes": 4369955360
+        },
+        "F32": {
+          "tensors": 336,
+          "bytes": 1344
+        },
+        "F8_E4M3": {
+          "tensors": 401,
+          "bytes": 11560550400
+        },
+        "U8": {
+          "tensors": 168,
+          "bytes": 7486832640
+        }
+      },
+      "by_storage": {
+        "bf16": {
+          "tensors": 1063,
+          "bytes": 4369955360
+        },
+        "fp8_weight": {
+          "tensors": 233,
+          "bytes": 10624696320
+        },
+        "nvfp4_block_scale": {
+          "tensors": 168,
+          "bytes": 935854080
+        },
+        "nvfp4_packed": {
+          "tensors": 168,
+          "bytes": 7486832640
+        },
+        "quant_scalar": {
+          "tensors": 336,
+          "bytes": 1344
+        }
+      },
+      "by_file": {
+        "model.safetensors": {
+          "tensors": 1953,
+          "tensor_bytes": 22567940960,
+          "file_bytes": 22568192096,
+          "container_overhead_bytes": 251136
+        },
+        "model_mtp.safetensors": {
+          "tensors": 15,
+          "tensor_bytes": 849398784,
+          "file_bytes": 849400392,
+          "container_overhead_bytes": 1608
+        }
+      },
+      "unclassified": [],
+      "profile": {
+        "hidden_size": 5120,
+        "layers": 64,
+        "full_attention_layers": 16,
+        "linear_attention_layers": 48,
+        "attention_heads": 24,
+        "kv_heads": 4,
+        "head_dim": 256,
+        "linear_key_heads": 16,
+        "linear_value_heads": 48,
+        "linear_key_head_dim": 128,
+        "linear_value_head_dim": 128,
+        "linear_conv_kernel_dim": 4,
+        "experts": null,
+        "experts_per_token": null
+      },
+      "state_budgets": [
+        {
+          "context_tokens": 16384,
+          "concurrency": 1,
+          "kv_fp32_bytes": 2147483648,
+          "kv_bf16_bytes": 1073741824,
+          "kv_fp8_bytes": 536870912,
+          "gated_delta_fp32_bytes": 150994944,
+          "causal_conv_fp32_bytes": 7864320,
+          "paged_block_tables_bytes": 65536,
+          "attention_query_gate_scratch_bytes": 786432,
+          "current_runtime_extra_conv_weight_bytes": 7864320
+        },
+        {
+          "context_tokens": 32768,
+          "concurrency": 1,
+          "kv_fp32_bytes": 4294967296,
+          "kv_bf16_bytes": 2147483648,
+          "kv_fp8_bytes": 1073741824,
+          "gated_delta_fp32_bytes": 150994944,
+          "causal_conv_fp32_bytes": 7864320,
+          "paged_block_tables_bytes": 131072,
+          "attention_query_gate_scratch_bytes": 786432,
+          "current_runtime_extra_conv_weight_bytes": 7864320
+        },
+        {
+          "context_tokens": 65536,
+          "concurrency": 1,
+          "kv_fp32_bytes": 8589934592,
+          "kv_bf16_bytes": 4294967296,
+          "kv_fp8_bytes": 2147483648,
+          "gated_delta_fp32_bytes": 150994944,
+          "causal_conv_fp32_bytes": 7864320,
+          "paged_block_tables_bytes": 262144,
+          "attention_query_gate_scratch_bytes": 786432,
+          "current_runtime_extra_conv_weight_bytes": 7864320
+        },
+        {
+          "context_tokens": 131072,
+          "concurrency": 1,
+          "kv_fp32_bytes": 17179869184,
+          "kv_bf16_bytes": 8589934592,
+          "kv_fp8_bytes": 4294967296,
+          "gated_delta_fp32_bytes": 150994944,
+          "causal_conv_fp32_bytes": 7864320,
+          "paged_block_tables_bytes": 524288,
+          "attention_query_gate_scratch_bytes": 786432,
+          "current_runtime_extra_conv_weight_bytes": 7864320
+        },
+        {
+          "context_tokens": 16384,
+          "concurrency": 2,
+          "kv_fp32_bytes": 4294967296,
+          "kv_bf16_bytes": 2147483648,
+          "kv_fp8_bytes": 1073741824,
+          "gated_delta_fp32_bytes": 301989888,
+          "causal_conv_fp32_bytes": 15728640,
+          "paged_block_tables_bytes": 131072,
+          "attention_query_gate_scratch_bytes": 1572864,
+          "current_runtime_extra_conv_weight_bytes": 15728640
+        },
+        {
+          "context_tokens": 32768,
+          "concurrency": 2,
+          "kv_fp32_bytes": 8589934592,
+          "kv_bf16_bytes": 4294967296,
+          "kv_fp8_bytes": 2147483648,
+          "gated_delta_fp32_bytes": 301989888,
+          "causal_conv_fp32_bytes": 15728640,
+          "paged_block_tables_bytes": 262144,
+          "attention_query_gate_scratch_bytes": 1572864,
+          "current_runtime_extra_conv_weight_bytes": 15728640
+        },
+        {
+          "context_tokens": 65536,
+          "concurrency": 2,
+          "kv_fp32_bytes": 17179869184,
+          "kv_bf16_bytes": 8589934592,
+          "kv_fp8_bytes": 4294967296,
+          "gated_delta_fp32_bytes": 301989888,
+          "causal_conv_fp32_bytes": 15728640,
+          "paged_block_tables_bytes": 524288,
+          "attention_query_gate_scratch_bytes": 1572864,
+          "current_runtime_extra_conv_weight_bytes": 15728640
+        },
+        {
+          "context_tokens": 131072,
+          "concurrency": 2,
+          "kv_fp32_bytes": 34359738368,
+          "kv_bf16_bytes": 17179869184,
+          "kv_fp8_bytes": 8589934592,
+          "gated_delta_fp32_bytes": 301989888,
+          "causal_conv_fp32_bytes": 15728640,
+          "paged_block_tables_bytes": 1048576,
+          "attention_query_gate_scratch_bytes": 1572864,
+          "current_runtime_extra_conv_weight_bytes": 15728640
+        },
+        {
+          "context_tokens": 16384,
+          "concurrency": 4,
+          "kv_fp32_bytes": 8589934592,
+          "kv_bf16_bytes": 4294967296,
+          "kv_fp8_bytes": 2147483648,
+          "gated_delta_fp32_bytes": 603979776,
+          "causal_conv_fp32_bytes": 31457280,
+          "paged_block_tables_bytes": 262144,
+          "attention_query_gate_scratch_bytes": 3145728,
+          "current_runtime_extra_conv_weight_bytes": 31457280
+        },
+        {
+          "context_tokens": 32768,
+          "concurrency": 4,
+          "kv_fp32_bytes": 17179869184,
+          "kv_bf16_bytes": 8589934592,
+          "kv_fp8_bytes": 4294967296,
+          "gated_delta_fp32_bytes": 603979776,
+          "causal_conv_fp32_bytes": 31457280,
+          "paged_block_tables_bytes": 524288,
+          "attention_query_gate_scratch_bytes": 3145728,
+          "current_runtime_extra_conv_weight_bytes": 31457280
+        },
+        {
+          "context_tokens": 65536,
+          "concurrency": 4,
+          "kv_fp32_bytes": 34359738368,
+          "kv_bf16_bytes": 17179869184,
+          "kv_fp8_bytes": 8589934592,
+          "gated_delta_fp32_bytes": 603979776,
+          "causal_conv_fp32_bytes": 31457280,
+          "paged_block_tables_bytes": 1048576,
+          "attention_query_gate_scratch_bytes": 3145728,
+          "current_runtime_extra_conv_weight_bytes": 31457280
+        },
+        {
+          "context_tokens": 131072,
+          "concurrency": 4,
+          "kv_fp32_bytes": 68719476736,
+          "kv_bf16_bytes": 34359738368,
+          "kv_fp8_bytes": 17179869184,
+          "gated_delta_fp32_bytes": 603979776,
+          "causal_conv_fp32_bytes": 31457280,
+          "paged_block_tables_bytes": 2097152,
+          "attention_query_gate_scratch_bytes": 3145728,
+          "current_runtime_extra_conv_weight_bytes": 31457280
+        }
+      ],
+      "residency_plan": {
+        "reported_opencl_global_budget_bytes": 25563234304,
+        "safety_reserve_bytes": 2147483648,
+        "resident_text_compute_weights_bytes": 19103683968,
+        "lazy_cpu_embedding_bytes": 2542796800,
+        "excluded_optional_vision_bytes": 921460192,
+        "excluded_optional_mtp_bytes": 849398784,
+        "scenarios": [
+          {
+            "context_tokens": 16384,
+            "concurrency": 1,
+            "fixed_state_and_known_scratch_bytes": 167575552,
+            "kv_variants": {
+              "fp32": {
+                "known_runtime_bytes": 21418743168,
+                "headroom_before_reserve_bytes": 4144491136,
+                "headroom_after_reserve_bytes": 1997007488,
+                "fits_with_reserve": true
+              },
+              "bf16": {
+                "known_runtime_bytes": 20345001344,
+                "headroom_before_reserve_bytes": 5218232960,
+                "headroom_after_reserve_bytes": 3070749312,
+                "fits_with_reserve": true
+              },
+              "fp8": {
+                "known_runtime_bytes": 19808130432,
+                "headroom_before_reserve_bytes": 5755103872,
+                "headroom_after_reserve_bytes": 3607620224,
+                "fits_with_reserve": true
+              }
+            }
+          },
+          {
+            "context_tokens": 32768,
+            "concurrency": 1,
+            "fixed_state_and_known_scratch_bytes": 167641088,
+            "kv_variants": {
+              "fp32": {
+                "known_runtime_bytes": 23566292352,
+                "headroom_before_reserve_bytes": 1996941952,
+                "headroom_after_reserve_bytes": -150541696,
+                "fits_with_reserve": false
+              },
+              "bf16": {
+                "known_runtime_bytes": 21418808704,
+                "headroom_before_reserve_bytes": 4144425600,
+                "headroom_after_reserve_bytes": 1996941952,
+                "fits_with_reserve": true
+              },
+              "fp8": {
+                "known_runtime_bytes": 20345066880,
+                "headroom_before_reserve_bytes": 5218167424,
+                "headroom_after_reserve_bytes": 3070683776,
+                "fits_with_reserve": true
+              }
+            }
+          },
+          {
+            "context_tokens": 65536,
+            "concurrency": 1,
+            "fixed_state_and_known_scratch_bytes": 167772160,
+            "kv_variants": {
+              "fp32": {
+                "known_runtime_bytes": 27861390720,
+                "headroom_before_reserve_bytes": -2298156416,
+                "headroom_after_reserve_bytes": -4445640064,
+                "fits_with_reserve": false
+              },
+              "bf16": {
+                "known_runtime_bytes": 23566423424,
+                "headroom_before_reserve_bytes": 1996810880,
+                "headroom_after_reserve_bytes": -150672768,
+                "fits_with_reserve": false
+              },
+              "fp8": {
+                "known_runtime_bytes": 21418939776,
+                "headroom_before_reserve_bytes": 4144294528,
+                "headroom_after_reserve_bytes": 1996810880,
+                "fits_with_reserve": true
+              }
+            }
+          },
+          {
+            "context_tokens": 131072,
+            "concurrency": 1,
+            "fixed_state_and_known_scratch_bytes": 168034304,
+            "kv_variants": {
+              "fp32": {
+                "known_runtime_bytes": 36451587456,
+                "headroom_before_reserve_bytes": -10888353152,
+                "headroom_after_reserve_bytes": -13035836800,
+                "fits_with_reserve": false
+              },
+              "bf16": {
+                "known_runtime_bytes": 27861652864,
+                "headroom_before_reserve_bytes": -2298418560,
+                "headroom_after_reserve_bytes": -4445902208,
+                "fits_with_reserve": false
+              },
+              "fp8": {
+                "known_runtime_bytes": 23566685568,
+                "headroom_before_reserve_bytes": 1996548736,
+                "headroom_after_reserve_bytes": -150934912,
+                "fits_with_reserve": false
+              }
+            }
+          },
+          {
+            "context_tokens": 16384,
+            "concurrency": 2,
+            "fixed_state_and_known_scratch_bytes": 335151104,
+            "kv_variants": {
+              "fp32": {
+                "known_runtime_bytes": 23733802368,
+                "headroom_before_reserve_bytes": 1829431936,
+                "headroom_after_reserve_bytes": -318051712,
+                "fits_with_reserve": false
+              },
+              "bf16": {
+                "known_runtime_bytes": 21586318720,
+                "headroom_before_reserve_bytes": 3976915584,
+                "headroom_after_reserve_bytes": 1829431936,
+                "fits_with_reserve": true
+              },
+              "fp8": {
+                "known_runtime_bytes": 20512576896,
+                "headroom_before_reserve_bytes": 5050657408,
+                "headroom_after_reserve_bytes": 2903173760,
+                "fits_with_reserve": true
+              }
+            }
+          },
+          {
+            "context_tokens": 32768,
+            "concurrency": 2,
+            "fixed_state_and_known_scratch_bytes": 335282176,
+            "kv_variants": {
+              "fp32": {
+                "known_runtime_bytes": 28028900736,
+                "headroom_before_reserve_bytes": -2465666432,
+                "headroom_after_reserve_bytes": -4613150080,
+                "fits_with_reserve": false
+              },
+              "bf16": {
+                "known_runtime_bytes": 23733933440,
+                "headroom_before_reserve_bytes": 1829300864,
+                "headroom_after_reserve_bytes": -318182784,
+                "fits_with_reserve": false
+              },
+              "fp8": {
+                "known_runtime_bytes": 21586449792,
+                "headroom_before_reserve_bytes": 3976784512,
+                "headroom_after_reserve_bytes": 1829300864,
+                "fits_with_reserve": true
+              }
+            }
+          },
+          {
+            "context_tokens": 65536,
+            "concurrency": 2,
+            "fixed_state_and_known_scratch_bytes": 335544320,
+            "kv_variants": {
+              "fp32": {
+                "known_runtime_bytes": 36619097472,
+                "headroom_before_reserve_bytes": -11055863168,
+                "headroom_after_reserve_bytes": -13203346816,
+                "fits_with_reserve": false
+              },
+              "bf16": {
+                "known_runtime_bytes": 28029162880,
+                "headroom_before_reserve_bytes": -2465928576,
+                "headroom_after_reserve_bytes": -4613412224,
+                "fits_with_reserve": false
+              },
+              "fp8": {
+                "known_runtime_bytes": 23734195584,
+                "headroom_before_reserve_bytes": 1829038720,
+                "headroom_after_reserve_bytes": -318444928,
+                "fits_with_reserve": false
+              }
+            }
+          },
+          {
+            "context_tokens": 131072,
+            "concurrency": 2,
+            "fixed_state_and_known_scratch_bytes": 336068608,
+            "kv_variants": {
+              "fp32": {
+                "known_runtime_bytes": 53799490944,
+                "headroom_before_reserve_bytes": -28236256640,
+                "headroom_after_reserve_bytes": -30383740288,
+                "fits_with_reserve": false
+              },
+              "bf16": {
+                "known_runtime_bytes": 36619621760,
+                "headroom_before_reserve_bytes": -11056387456,
+                "headroom_after_reserve_bytes": -13203871104,
+                "fits_with_reserve": false
+              },
+              "fp8": {
+                "known_runtime_bytes": 28029687168,
+                "headroom_before_reserve_bytes": -2466452864,
+                "headroom_after_reserve_bytes": -4613936512,
+                "fits_with_reserve": false
+              }
+            }
+          },
+          {
+            "context_tokens": 16384,
+            "concurrency": 4,
+            "fixed_state_and_known_scratch_bytes": 670302208,
+            "kv_variants": {
+              "fp32": {
+                "known_runtime_bytes": 28363920768,
+                "headroom_before_reserve_bytes": -2800686464,
+                "headroom_after_reserve_bytes": -4948170112,
+                "fits_with_reserve": false
+              },
+              "bf16": {
+                "known_runtime_bytes": 24068953472,
+                "headroom_before_reserve_bytes": 1494280832,
+                "headroom_after_reserve_bytes": -653202816,
+                "fits_with_reserve": false
+              },
+              "fp8": {
+                "known_runtime_bytes": 21921469824,
+                "headroom_before_reserve_bytes": 3641764480,
+                "headroom_after_reserve_bytes": 1494280832,
+                "fits_with_reserve": true
+              }
+            }
+          },
+          {
+            "context_tokens": 32768,
+            "concurrency": 4,
+            "fixed_state_and_known_scratch_bytes": 670564352,
+            "kv_variants": {
+              "fp32": {
+                "known_runtime_bytes": 36954117504,
+                "headroom_before_reserve_bytes": -11390883200,
+                "headroom_after_reserve_bytes": -13538366848,
+                "fits_with_reserve": false
+              },
+              "bf16": {
+                "known_runtime_bytes": 28364182912,
+                "headroom_before_reserve_bytes": -2800948608,
+                "headroom_after_reserve_bytes": -4948432256,
+                "fits_with_reserve": false
+              },
+              "fp8": {
+                "known_runtime_bytes": 24069215616,
+                "headroom_before_reserve_bytes": 1494018688,
+                "headroom_after_reserve_bytes": -653464960,
+                "fits_with_reserve": false
+              }
+            }
+          },
+          {
+            "context_tokens": 65536,
+            "concurrency": 4,
+            "fixed_state_and_known_scratch_bytes": 671088640,
+            "kv_variants": {
+              "fp32": {
+                "known_runtime_bytes": 54134510976,
+                "headroom_before_reserve_bytes": -28571276672,
+                "headroom_after_reserve_bytes": -30718760320,
+                "fits_with_reserve": false
+              },
+              "bf16": {
+                "known_runtime_bytes": 36954641792,
+                "headroom_before_reserve_bytes": -11391407488,
+                "headroom_after_reserve_bytes": -13538891136,
+                "fits_with_reserve": false
+              },
+              "fp8": {
+                "known_runtime_bytes": 28364707200,
+                "headroom_before_reserve_bytes": -2801472896,
+                "headroom_after_reserve_bytes": -4948956544,
+                "fits_with_reserve": false
+              }
+            }
+          },
+          {
+            "context_tokens": 131072,
+            "concurrency": 4,
+            "fixed_state_and_known_scratch_bytes": 672137216,
+            "kv_variants": {
+              "fp32": {
+                "known_runtime_bytes": 88495297920,
+                "headroom_before_reserve_bytes": -62932063616,
+                "headroom_after_reserve_bytes": -65079547264,
+                "fits_with_reserve": false
+              },
+              "bf16": {
+                "known_runtime_bytes": 54135559552,
+                "headroom_before_reserve_bytes": -28572325248,
+                "headroom_after_reserve_bytes": -30719808896,
+                "fits_with_reserve": false
+              },
+              "fp8": {
+                "known_runtime_bytes": 36955690368,
+                "headroom_before_reserve_bytes": -11392456064,
+                "headroom_after_reserve_bytes": -13539939712,
+                "fits_with_reserve": false
+              }
+            }
+          }
+        ],
+        "qualification_policy": {
+          "load_categories": [
+            "text_dense_mlp",
+            "text_full_attention",
+            "text_linear_attention",
+            "text_lm_head",
+            "text_norm"
+          ],
+          "lazy_categories": [
+            "text_embedding"
+          ],
+          "excluded_categories": [
+            "optional_vision",
+            "optional_mtp"
+          ],
+          "current_kv_dtype": "fp32",
+          "current_context_tokens": 16384,
+          "current_max_concurrency": 1,
+          "next_kv_dtype": "bf16",
+          "next_context_tokens": 32768,
+          "moe_bank_gates": [],
+          "admission_rule": "known runtime bytes + 2147483648 safety-reserve bytes must not exceed the reported OpenCL global budget; full-load qualification may lower the advertised context"
+        },
+        "assumptions": [
+          "embedding lookup stays memory-mapped on CPU and only touched rows enter the working set",
+          "all other text compute weights are resident in their checkpoint precision",
+          "vision and MTP are not loaded by the initial coding service",
+          "the reserve covers allocator overhead and model-wide activation/scheduler scratch not yet measured",
+          "current runtime causal-convolution objects duplicate FP32 conv weights per request"
+        ]
+      }
+    }
+  ]
+}

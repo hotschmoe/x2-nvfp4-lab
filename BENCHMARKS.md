@@ -390,3 +390,42 @@ per-bank leak through 8.64 GB; it is not authorization to jump to 40 banks.
 
 Artifact:
 `campaign_results/bandwidth-first/20260822-202356-768080-moe-bank-residency.json`.
+
+## Exact checkpoint and serving-state memory ledger
+
+`inventory_checkpoint_memory.py` reads safetensors metadata without loading
+tensor payloads, classifies every tensor by serving ownership, and derives KV,
+gated-delta, causal-convolution, block-table, and known scratch allocations from
+each model config. Both inventories have zero unclassified tensors.
+
+| Model | All tensor payloads | Text compute weights resident | Lazy CPU embedding | Vision omitted | MTP omitted |
+|---|---:|---:|---:|---:|---:|
+| Ornith 35B MoE | 21.800 GiB | 18.448 GiB | 0.947 GiB | 0.832 GiB | 1.573 GiB |
+| Qwen 27B dense | 21.809 GiB | 17.792 GiB | 2.368 GiB | 0.858 GiB | 0.791 GiB |
+
+"Text compute weights" includes the LM head, every attention/MLP weight, norms,
+and MoE routing/shared weights, but not the token embedding table. The initial
+text-only server can memory-map the embedding and touch only requested token
+rows; it must not eagerly copy the entire table into an OpenCL allocation.
+
+The planner uses the observed 25,563,234,304-byte OpenCL global budget and holds
+back 2 GiB for allocator overhead plus model-wide scratch not yet measured. At
+concurrency one:
+
+| Model / KV format | 32K known runtime | Headroom after 2 GiB reserve | 64K known runtime | Headroom after reserve |
+|---|---:|---:|---:|---:|
+| 35B MoE / current FP32 | 19.764 GiB | 2.044 GiB | 21.014 GiB | 0.794 GiB |
+| 35B MoE / BF16 target | 19.139 GiB | 2.669 GiB | 19.764 GiB | 2.044 GiB |
+| 27B dense / current FP32 | 21.948 GiB | -0.140 GiB | 25.948 GiB | -4.140 GiB |
+| 27B dense / BF16 target | 19.948 GiB | 1.860 GiB | 21.948 GiB | -0.140 GiB |
+| 27B dense / FP8 target | 18.948 GiB | 2.860 GiB | 19.948 GiB | 1.860 GiB |
+
+These are allocation ledgers, not successful full-model residency results. The
+current FP32 policy is therefore 32K for 35B MoE and 16K for dense 27B until the
+full staged load passes. BF16 KV is the next high-value memory implementation:
+it makes dense 32K fit the reserve policy and gives MoE 64K comfortable room.
+FP8 KV remains a later correctness-qualified option for dense 64K or higher
+concurrency.
+
+Canonical artifact:
+`campaign_results/bandwidth-first/checkpoint-memory-inventory.json`.
