@@ -190,6 +190,14 @@ struct nvfp4_runtime {
     cl_kernel gemm_lab_local_vector = nullptr;
     cl_kernel gemm_lab_direct_scalar = nullptr;
     cl_kernel gemm_lab_direct_vector = nullptr;
+    cl_kernel gemm_lab_register_2 = nullptr;
+    cl_kernel gemm_lab_register_4 = nullptr;
+    cl_kernel gemm_lab_register_8 = nullptr;
+    cl_kernel gemm_lab_register_16 = nullptr;
+    cl_kernel gemm_lab_register_transposed_2 = nullptr;
+    cl_kernel gemm_lab_register_transposed_4 = nullptr;
+    cl_kernel gemm_lab_register_transposed_8 = nullptr;
+    cl_kernel gemm_lab_register_transposed_16 = nullptr;
     cl_kernel fp8_gemv_scalar = nullptr;
     cl_kernel fp8_gemv_subgroup = nullptr;
     cl_kernel fp8_gemv_rows_tiled = nullptr;
@@ -295,6 +303,14 @@ struct nvfp4_runtime {
         if (gemm_tiled) clReleaseKernel(gemm_tiled);
         if (gemm_lab_direct_vector) clReleaseKernel(gemm_lab_direct_vector);
         if (gemm_lab_direct_scalar) clReleaseKernel(gemm_lab_direct_scalar);
+        if (gemm_lab_register_16) clReleaseKernel(gemm_lab_register_16);
+        if (gemm_lab_register_8) clReleaseKernel(gemm_lab_register_8);
+        if (gemm_lab_register_4) clReleaseKernel(gemm_lab_register_4);
+        if (gemm_lab_register_2) clReleaseKernel(gemm_lab_register_2);
+        if (gemm_lab_register_transposed_16) clReleaseKernel(gemm_lab_register_transposed_16);
+        if (gemm_lab_register_transposed_8) clReleaseKernel(gemm_lab_register_transposed_8);
+        if (gemm_lab_register_transposed_4) clReleaseKernel(gemm_lab_register_transposed_4);
+        if (gemm_lab_register_transposed_2) clReleaseKernel(gemm_lab_register_transposed_2);
         if (gemm_lab_local_vector) clReleaseKernel(gemm_lab_local_vector);
         if (gemm_lab_local_scalar) clReleaseKernel(gemm_lab_local_scalar);
         if (gemm_subgroup) clReleaseKernel(gemm_subgroup);
@@ -736,8 +752,8 @@ void enqueue_nvfp4_linear(
         int vector_tile = 0;
         if ((matrix->rows == 17408 && matrix->cols == 5120) ||
             (matrix->rows == 5120 && matrix->cols == 17408)) {
-            vector_tile = vectors >= 16 ? 16 : 1;
-            while (vector_tile < vectors) vector_tile *= 2;
+            vector_tile = 1;
+            while (vector_tile < vectors && vector_tile < 16) vector_tile *= 2;
         } else if (matrix->rows == 512 && matrix->cols == 2048) {
             vector_tile = 1;
         } else if (matrix->rows == 2048 && matrix->cols == 512) {
@@ -875,7 +891,23 @@ void enqueue_nvfp4_lab_gemm(
             ? runtime->gemm_lab_local_vector
             : (implementation_kind == 2
                 ? runtime->gemm_lab_direct_scalar
-                : runtime->gemm_lab_direct_vector));
+                : (implementation_kind == 3
+                    ? runtime->gemm_lab_direct_vector
+                    : (implementation_kind == 4
+                        ? (vector_tile == 2
+                            ? runtime->gemm_lab_register_2
+                            : (vector_tile == 4
+                                ? runtime->gemm_lab_register_4
+                                : (vector_tile == 8
+                                    ? runtime->gemm_lab_register_8
+                                    : runtime->gemm_lab_register_16)))
+                        : (vector_tile == 2
+                            ? runtime->gemm_lab_register_transposed_2
+                            : (vector_tile == 4
+                                ? runtime->gemm_lab_register_transposed_4
+                                : (vector_tile == 8
+                                    ? runtime->gemm_lab_register_transposed_8
+                                    : runtime->gemm_lab_register_transposed_16)))))));
     cl_uint arg = 0;
     check_cl(clSetKernelArg(kernel, arg++, sizeof(cl_mem), &matrix->packed),
              "clSetKernelArg(gemm_lab_packed)");
@@ -905,10 +937,16 @@ void enqueue_nvfp4_lab_gemm(
                  "clSetKernelArg(gemm_lab_scale_tile)");
     }
 
-    const size_t local[2] = {64u, static_cast<size_t>(vector_tile)};
+    const bool register_microtile = implementation_kind >= 4;
+    const size_t local[2] = {
+        64u,
+        register_microtile ? 1u : static_cast<size_t>(vector_tile),
+    };
+    const size_t vector_groups =
+        (static_cast<size_t>(vectors) + vector_tile - 1u)/vector_tile;
     const size_t global[2] = {
         static_cast<size_t>(matrix->rows)*64u,
-        (static_cast<size_t>(vectors) + vector_tile - 1u)/vector_tile*vector_tile,
+        register_microtile ? vector_groups : vector_groups*vector_tile,
     };
     check_cl(clEnqueueNDRangeKernel(runtime->queue, kernel, 2, nullptr,
                                     global, local, 0, nullptr, event),
@@ -1115,6 +1153,22 @@ extern "C" NVFP4_API nvfp4_status nvfp4_runtime_create(
             "nvfp4_native_gemm_lab_direct_scalar");
         holder->gemm_lab_direct_vector = make_kernel(
             "nvfp4_native_gemm_lab_direct_vector");
+        holder->gemm_lab_register_2 = make_kernel(
+            "nvfp4_native_gemm_lab_register_2");
+        holder->gemm_lab_register_4 = make_kernel(
+            "nvfp4_native_gemm_lab_register_4");
+        holder->gemm_lab_register_8 = make_kernel(
+            "nvfp4_native_gemm_lab_register_8");
+        holder->gemm_lab_register_16 = make_kernel(
+            "nvfp4_native_gemm_lab_register_16");
+        holder->gemm_lab_register_transposed_2 = make_kernel(
+            "nvfp4_native_gemm_lab_register_transposed_2");
+        holder->gemm_lab_register_transposed_4 = make_kernel(
+            "nvfp4_native_gemm_lab_register_transposed_4");
+        holder->gemm_lab_register_transposed_8 = make_kernel(
+            "nvfp4_native_gemm_lab_register_transposed_8");
+        holder->gemm_lab_register_transposed_16 = make_kernel(
+            "nvfp4_native_gemm_lab_register_transposed_16");
         holder->fp8_gemv_scalar = make_kernel("fp8_native_gemv_scalar");
         holder->fp8_gemv_subgroup = make_kernel("fp8_native_gemv_subgroup");
         holder->fp8_gemv_rows_tiled = make_kernel("fp8_native_gemv_rows_tiled");
@@ -2286,7 +2340,9 @@ extern "C" NVFP4_API nvfp4_status nvfp4_gemm_device_lab_f32(
         vectors <= 1 || vector_tile <= 0 ||
         (vector_tile & (vector_tile - 1)) != 0 ||
         k_tile < 16 || k_tile % 16 != 0 ||
-        implementation_kind < 0 || implementation_kind > 3) {
+        implementation_kind < 0 || implementation_kind > 5 ||
+        (implementation_kind >= 4 && vector_tile != 2 && vector_tile != 4 &&
+         vector_tile != 8 && vector_tile != 16)) {
         return fail_invalid("invalid kernel-lab GEMM arguments");
     }
     const size_t input_elements = static_cast<size_t>(vectors)*matrix->cols;
@@ -2306,7 +2362,10 @@ extern "C" NVFP4_API nvfp4_status nvfp4_gemm_device_lab_f32(
         check_cl(clGetDeviceInfo(runtime->device, CL_DEVICE_LOCAL_MEM_SIZE,
                                  sizeof(local_memory), &local_memory, nullptr),
                  "clGetDeviceInfo(gemm_local_memory_size)");
-        if (64u*static_cast<size_t>(vector_tile) > max_work_group) {
+        const size_t work_group_items = implementation_kind >= 4
+            ? 64u
+            : 64u*static_cast<size_t>(vector_tile);
+        if (work_group_items > max_work_group) {
             return fail_invalid("kernel-lab vector tile exceeds device work-group size");
         }
         const size_t local_bytes = static_cast<size_t>(k_tile)/2u +

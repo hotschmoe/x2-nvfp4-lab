@@ -22,8 +22,16 @@ DEFAULT_SHAPES = ("dense-gate", "dense-down", "moe-gate", "moe-down")
 
 
 def config_name(vector_tile: int, k_tile: int, kind: int) -> str:
-    path = "local" if kind < 2 else "direct"
-    decode = "scalar" if kind % 2 == 0 else "vector"
+    path = (
+        "local"
+        if kind < 2
+        else (
+            "direct"
+            if kind < 4
+            else ("register" if kind == 4 else "register-transposed")
+        )
+    )
+    decode = "vector" if kind in (1, 3) else "scalar"
     suffix = f"-k{k_tile}" if path == "local" else ""
     return f"lab-{path}-{decode}-v{vector_tile}{suffix}"
 
@@ -34,6 +42,7 @@ def measure_case(
     vectors: int,
     vector_tiles: list[int],
     k_tiles: list[int],
+    register_kinds: list[int],
     warmups: int,
     samples: int,
     rng: random.Random,
@@ -46,6 +55,7 @@ def measure_case(
     )
     matrix = runtime.upload(host.packed, host.scales, host.global_scale)
     input_buffer = runtime.upload_buffer(x)
+    input_transposed_buffer = runtime.upload_buffer(np.ascontiguousarray(x.T))
     output_buffer = runtime.create_buffer(vectors * host.rows * 4)
     configurations = [
         (config_name(vector_tile, k_tile, kind), vector_tile, k_tile, kind)
@@ -53,6 +63,12 @@ def measure_case(
         for kind in range(4)
         for k_tile in (k_tiles if kind < 2 else k_tiles[:1])
     ]
+    configurations.extend(
+        (config_name(vector_tile, k_tiles[0], kind), vector_tile, k_tiles[0], kind)
+        for kind in register_kinds
+        for vector_tile in vector_tiles
+        if vector_tile in (2, 4, 8, 16)
+    )
     timings: dict[str, list[float]] = {"production-dispatch": []}
     correctness: dict[str, dict[str, Any]] = {}
     failures: list[dict[str, str]] = []
@@ -66,7 +82,7 @@ def measure_case(
     def run_lab(vector_tile: int, k_tile: int, kind: int) -> float:
         runtime.gemm_device_lab(
             matrix,
-            input_buffer,
+            input_transposed_buffer if kind == 5 else input_buffer,
             vectors=vectors,
             vector_tile=vector_tile,
             k_tile=k_tile,
@@ -169,6 +185,7 @@ def measure_case(
         }
     finally:
         output_buffer.close()
+        input_transposed_buffer.close()
         input_buffer.close()
         matrix.close()
 
@@ -189,6 +206,11 @@ def main() -> int:
     parser.add_argument("--vectors", default="2,4,8,16,32")
     parser.add_argument("--vector-tiles", default="1,2,4,8,16")
     parser.add_argument("--k-tiles", default="512,1024,2048,4096,8192,16384,32768")
+    parser.add_argument(
+        "--register-kinds",
+        default="4,5",
+        help="register treatments: 4=vector-major, 5=K-major input",
+    )
     parser.add_argument("--warmups", type=int, default=2)
     parser.add_argument("--samples", type=int, default=10)
     parser.add_argument("--results", type=Path, default=RESULTS)
@@ -200,6 +222,9 @@ def main() -> int:
     vectors = parse_csv(parser, args.vectors, "vectors")
     vector_tiles = parse_csv(parser, args.vector_tiles, "vector tiles")
     k_tiles = parse_csv(parser, args.k_tiles, "K tiles")
+    register_kinds = parse_csv(parser, args.register_kinds, "register kinds")
+    if not set(register_kinds) <= {4, 5}:
+        parser.error("register kinds must be drawn from 4,5")
     if any(value <= 1 for value in vectors):
         parser.error("GEMM vector counts must be greater than one")
     if args.warmups < 0 or args.samples <= 0:
@@ -233,6 +258,7 @@ def main() -> int:
                     vector_count,
                     vector_tiles,
                     k_tiles,
+                    register_kinds,
                     args.warmups,
                     args.samples,
                     rng,
@@ -263,11 +289,14 @@ def main() -> int:
             "vectors": vectors,
             "vector_tiles": vector_tiles,
             "k_tiles": k_tiles,
+            "register_kinds": register_kinds,
             "implementations": [
                 "local-scalar",
                 "local-vector",
                 "direct-global-scalar",
                 "direct-global-vector",
+                "cross-vector-register-scalar",
+                "cross-vector-register-scalar-k-major-input",
             ],
             "correctness_rtol": 5e-5,
             "correctness_atol": 5e-5,
@@ -282,6 +311,7 @@ def main() -> int:
             "compulsory bandwidth assumes one ideal weight read for the whole launch",
             "physical traffic and register/occupancy counters remain unavailable",
             "the full serving prefill path remains sequential until a winner is promoted",
+            "K-major-input kernel timings exclude the activation transpose/layout conversion",
         ],
     }
     args.results.mkdir(parents=True, exist_ok=True)

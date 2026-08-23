@@ -408,3 +408,20 @@ MoE changes only the standalone head in this milestone because its experts use
 the contiguous bank kernels. Complete-token kernel/wall falls from 76.468/80.611
 to 74.521/78.582 ms, or 12.405 to 12.726 tok/s, again with exact logits. The
 expert-bank row/K treatment still needs a separate port and full-model A/B.
+
+## Campaign close: 2026-08-22
+
+The campaign ends with production-proven dense decode at 2.243 end-to-end tok/s
+and the tokenizer-backed MoE coding run at 11.75 decode tok/s. Dense full-token
+useful traffic is 44.53 GB/s (34.5% of the calibrated 129 GB/s ceiling and
+19.5% of nominal 228 GB/s); its NVFP4 linears alone deliver 42.79 GB/s. MoE's
+active logical checkpoint traffic is about 29.02 GB/s (22.5% / 12.7%). These
+are useful-byte rates, not memory-controller counters.
+
+The final lab-only register microtile reaches 185.71 GFLOP/s on dense gate and
+212.07 GFLOP/s on MoE gate, while short-K MoE down improves as much as 1.716x.
+It is a validated kernel result, not a prefill result. See
+`SESSION_HANDOFF_2026-08-22.md` for the exact restart boundary and research
+queue. Vision and MTP remain explicitly deferred; hybrid NPU/GPU execution
+remains open but must include layout expansion, coherency, synchronization,
+energy, and end-to-end latency in its acceptance gate.

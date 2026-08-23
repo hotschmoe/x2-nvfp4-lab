@@ -281,7 +281,9 @@ NVFP4_API nvfp4_status nvfp4_linear_device_lab_f32(
 // Synchronous multi-vector kernel-lab path. vector_tile is the number of
 // half-wave subgroups that share a native weight tile. implementation_kind is
 // local-scalar (0), local-vector (1), direct-global scalar (2), or direct-global
-// vector (3). The direct paths ignore k_tile.
+// vector (3), cross-vector register microtile over vector-major input (4), or
+// the same microtile over K-major/transposed input (5). Direct/register paths
+// ignore k_tile; register microtiles require vector_tile 2, 4, 8, or 16.
 NVFP4_API nvfp4_status nvfp4_gemm_device_lab_f32(
     nvfp4_runtime * runtime,
     const nvfp4_matrix * matrix,

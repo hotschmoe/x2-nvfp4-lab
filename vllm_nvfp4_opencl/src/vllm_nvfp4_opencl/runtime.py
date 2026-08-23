@@ -1207,7 +1207,11 @@ class Runtime:
         implementation_kind: int,
         out: DeviceBuffer | None = None,
     ) -> DeviceBuffer:
-        """Run one synchronous, multi-vector experimental kernel."""
+        """Run one synchronous, multi-vector experimental kernel.
+
+        implementation_kind 4 reuses each decoded weight across a 2/4/8/16
+        vector register microtile. Kind 5 expects K-major/transposed input.
+        """
         if vectors <= 1:
             raise ValueError("kernel-lab GEMM requires at least two vectors")
         output_bytes = vectors * matrix.rows * np.dtype(np.float32).itemsize

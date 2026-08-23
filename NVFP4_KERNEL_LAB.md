@@ -188,6 +188,60 @@ Dense retained-state generation now reaches 2.243 decode tok/s and 2.376
 sequential-prefill tok/s. The latter does not use the multi-vector GEMM yet;
 integrating a semantically correct prompt graph remains the next TTFT gate.
 
+## Final register-microtile experiment
+
+The last experiment tested true cross-vector decode reuse rather than grouping
+independent GEMVs. One subgroup owns one output row and a 2/4/8/16-vector
+register microtile, decodes each packed E2M1 value and E4M3 scale once, and
+applies it to every live vector accumulator. The production output remains the
+oracle at `rtol=5e-5, atol=5e-5`.
+
+An experimental launch error initially created `vector_tile` duplicate
+subgroups, all computing the same output. Those invalid artifacts were removed.
+After correcting register kernels to one 64-work-item subgroup per row/tile,
+opposite-order sweeps passed every gate and reproduced the shape-dependent
+result:
+
+| Shape / vectors | Repeated winner | GFLOP/s | Speedup vs production | Effective model GB/s | % of 129 / 228 |
+|---|---|---:|---:|---:|---:|
+| dense gate, 8 | register scalar v8 | 185.71 | 1.222x | 52.32 | 40.6% / 22.9% |
+| dense gate, 16 | register scalar v8 | 181.35 | 1.143x | 51.10 | 39.6% / 22.4% |
+| dense gate, 32 | register scalar v8 | 180.31 | 1.166x | 50.80 | 39.4% / 22.3% |
+| MoE gate, 32 | register scalar v8 | 212.07 | 1.095x | 60.68 | 47.0% / 26.6% |
+| MoE down, 8 | register scalar v8 | 160.09 | 1.566x | 45.81 | 35.5% / 20.1% |
+| MoE down, 32 | register scalar v8 | 184.37 | 1.716x | 52.75 | 40.9% / 23.1% |
+
+“Effective model GB/s” counts one useful native matrix use per vector. It is a
+model-throughput metric, not measured DRAM traffic: register v8 requests each
+weight tile once per eight vectors, and cache behavior is not exposed by the
+available counters. Dense-down's long K dimension is a counterexample: v4 wins
+at some small batches, but the direct production path ties or wins at 16/32.
+
+Arbitrary-vector tail tests at 3/5/6/7/9/12/24 also reject a simplistic rule.
+Masked register tiles win when sufficiently occupied, but direct kernels often
+win at 3/5/6/9. A future dispatcher must use `(rows, cols, vectors/tail)` rather
+than applying v8 globally. Register v16 is consistently poor, consistent with
+private-register pressure or spills.
+
+The K-major/transposed treatment is a verified negative control. Even excluding
+the transpose itself, it takes roughly 64-83 ms on the 16-vector dense-gate case
+versus about 15.7 ms for vector-major register v8 and 17.8 ms for production.
+The subgroup's lane-wise K stride matters more than making values across prompt
+vectors adjacent. Keep this result; do not retry the same layout without a
+different lane mapping.
+
+Canonical artifacts:
+
+- `20260822-233031-739112-nvfp4-gemm-lab.json` (layout control)
+- `20260822-233403-749729-nvfp4-gemm-lab.json` (forward order)
+- `20260822-233640-979831-nvfp4-gemm-lab.json` (reverse order repeat)
+- `20260822-233805-716364-nvfp4-gemm-lab.json` (non-power-of-two tails)
+
+The experiment is intentionally not promoted. The existing model prefill is
+token-sequential, and the older GEMM merely batches launches without reusing
+decoded weights. The next valid gate is a layer-major, recurrent/attention-aware
+prefill graph that batches safe MLP regions and reports tokenizer-backed TTFT.
+
 ## Primary references
 
 - [Qualcomm Snapdragon Mobile Platform OpenCL General Programming and Optimization Guide](https://docs.qualcomm.com/bundle/publicresource/80-NB295-11_REV_C_Qualcomm_Snapdragon_Mobile_Platform_Opencl_General_Programming_and_Optimization.pdf)

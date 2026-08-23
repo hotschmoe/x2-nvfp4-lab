@@ -771,6 +771,224 @@ kernel void nvfp4_native_gemm_lab_direct_vector(
         inv_weight_global_scale, 1);
 }
 
+// Register-microtile GEMM treatments. One subgroup owns one output row and a
+// small tile of prompt vectors. Each packed weight and scale is decoded once,
+// then multiplied into every vector accumulator. This tests true cross-vector
+// decode reuse rather than merely grouping independent GEMVs in one work-group.
+#define NVFP4_LOAD_X2(index) (float2)( \
+    x[(vector_base + 0)*cols + (index)], \
+    x[min(vector_base + 1, vectors - 1)*cols + (index)])
+#define NVFP4_LOAD_X4(index) (float4)( \
+    x[(vector_base + 0)*cols + (index)], \
+    x[min(vector_base + 1, vectors - 1)*cols + (index)], \
+    x[min(vector_base + 2, vectors - 1)*cols + (index)], \
+    x[min(vector_base + 3, vectors - 1)*cols + (index)])
+#define NVFP4_LOAD_X8(index) (float8)( \
+    x[(vector_base + 0)*cols + (index)], \
+    x[min(vector_base + 1, vectors - 1)*cols + (index)], \
+    x[min(vector_base + 2, vectors - 1)*cols + (index)], \
+    x[min(vector_base + 3, vectors - 1)*cols + (index)], \
+    x[min(vector_base + 4, vectors - 1)*cols + (index)], \
+    x[min(vector_base + 5, vectors - 1)*cols + (index)], \
+    x[min(vector_base + 6, vectors - 1)*cols + (index)], \
+    x[min(vector_base + 7, vectors - 1)*cols + (index)])
+#define NVFP4_LOAD_X16(index) (float16)( \
+    x[(vector_base + 0)*cols + (index)], \
+    x[min(vector_base + 1, vectors - 1)*cols + (index)], \
+    x[min(vector_base + 2, vectors - 1)*cols + (index)], \
+    x[min(vector_base + 3, vectors - 1)*cols + (index)], \
+    x[min(vector_base + 4, vectors - 1)*cols + (index)], \
+    x[min(vector_base + 5, vectors - 1)*cols + (index)], \
+    x[min(vector_base + 6, vectors - 1)*cols + (index)], \
+    x[min(vector_base + 7, vectors - 1)*cols + (index)], \
+    x[min(vector_base + 8, vectors - 1)*cols + (index)], \
+    x[min(vector_base + 9, vectors - 1)*cols + (index)], \
+    x[min(vector_base + 10, vectors - 1)*cols + (index)], \
+    x[min(vector_base + 11, vectors - 1)*cols + (index)], \
+    x[min(vector_base + 12, vectors - 1)*cols + (index)], \
+    x[min(vector_base + 13, vectors - 1)*cols + (index)], \
+    x[min(vector_base + 14, vectors - 1)*cols + (index)], \
+    x[min(vector_base + 15, vectors - 1)*cols + (index)])
+#define NVFP4_LOAD_TX2(index) (float2)( \
+    x[(index)*vectors + vector_base + 0], \
+    x[(index)*vectors + min(vector_base + 1, vectors - 1)])
+#define NVFP4_LOAD_TX4(index) (float4)( \
+    x[(index)*vectors + vector_base + 0], \
+    x[(index)*vectors + min(vector_base + 1, vectors - 1)], \
+    x[(index)*vectors + min(vector_base + 2, vectors - 1)], \
+    x[(index)*vectors + min(vector_base + 3, vectors - 1)])
+#define NVFP4_LOAD_TX8(index) (float8)( \
+    x[(index)*vectors + vector_base + 0], \
+    x[(index)*vectors + min(vector_base + 1, vectors - 1)], \
+    x[(index)*vectors + min(vector_base + 2, vectors - 1)], \
+    x[(index)*vectors + min(vector_base + 3, vectors - 1)], \
+    x[(index)*vectors + min(vector_base + 4, vectors - 1)], \
+    x[(index)*vectors + min(vector_base + 5, vectors - 1)], \
+    x[(index)*vectors + min(vector_base + 6, vectors - 1)], \
+    x[(index)*vectors + min(vector_base + 7, vectors - 1)])
+#define NVFP4_LOAD_TX16(index) (float16)( \
+    x[(index)*vectors + vector_base + 0], \
+    x[(index)*vectors + min(vector_base + 1, vectors - 1)], \
+    x[(index)*vectors + min(vector_base + 2, vectors - 1)], \
+    x[(index)*vectors + min(vector_base + 3, vectors - 1)], \
+    x[(index)*vectors + min(vector_base + 4, vectors - 1)], \
+    x[(index)*vectors + min(vector_base + 5, vectors - 1)], \
+    x[(index)*vectors + min(vector_base + 6, vectors - 1)], \
+    x[(index)*vectors + min(vector_base + 7, vectors - 1)], \
+    x[(index)*vectors + min(vector_base + 8, vectors - 1)], \
+    x[(index)*vectors + min(vector_base + 9, vectors - 1)], \
+    x[(index)*vectors + min(vector_base + 10, vectors - 1)], \
+    x[(index)*vectors + min(vector_base + 11, vectors - 1)], \
+    x[(index)*vectors + min(vector_base + 12, vectors - 1)], \
+    x[(index)*vectors + min(vector_base + 13, vectors - 1)], \
+    x[(index)*vectors + min(vector_base + 14, vectors - 1)], \
+    x[(index)*vectors + min(vector_base + 15, vectors - 1)])
+
+#define NVFP4_STORE_X2(values) do { \
+    const float r0 = sub_group_reduce_add((values).s0); \
+    const float r1 = sub_group_reduce_add((values).s1); \
+    if (lane == 0) { \
+        dst[(vector_base + 0)*rows + row] = r0; \
+        if (vector_base + 1 < vectors) dst[(vector_base + 1)*rows + row] = r1; \
+    } \
+} while (0)
+#define NVFP4_STORE_X4(values) do { \
+    const float r0 = sub_group_reduce_add((values).s0); \
+    const float r1 = sub_group_reduce_add((values).s1); \
+    const float r2 = sub_group_reduce_add((values).s2); \
+    const float r3 = sub_group_reduce_add((values).s3); \
+    if (lane == 0) { \
+        dst[(vector_base + 0)*rows + row] = r0; \
+        if (vector_base + 1 < vectors) dst[(vector_base + 1)*rows + row] = r1; \
+        if (vector_base + 2 < vectors) dst[(vector_base + 2)*rows + row] = r2; \
+        if (vector_base + 3 < vectors) dst[(vector_base + 3)*rows + row] = r3; \
+    } \
+} while (0)
+#define NVFP4_STORE_X8(values) do { \
+    const float r0 = sub_group_reduce_add((values).s0); \
+    const float r1 = sub_group_reduce_add((values).s1); \
+    const float r2 = sub_group_reduce_add((values).s2); \
+    const float r3 = sub_group_reduce_add((values).s3); \
+    const float r4 = sub_group_reduce_add((values).s4); \
+    const float r5 = sub_group_reduce_add((values).s5); \
+    const float r6 = sub_group_reduce_add((values).s6); \
+    const float r7 = sub_group_reduce_add((values).s7); \
+    if (lane == 0) { \
+        dst[(vector_base + 0)*rows + row] = r0; \
+        if (vector_base + 1 < vectors) dst[(vector_base + 1)*rows + row] = r1; \
+        if (vector_base + 2 < vectors) dst[(vector_base + 2)*rows + row] = r2; \
+        if (vector_base + 3 < vectors) dst[(vector_base + 3)*rows + row] = r3; \
+        if (vector_base + 4 < vectors) dst[(vector_base + 4)*rows + row] = r4; \
+        if (vector_base + 5 < vectors) dst[(vector_base + 5)*rows + row] = r5; \
+        if (vector_base + 6 < vectors) dst[(vector_base + 6)*rows + row] = r6; \
+        if (vector_base + 7 < vectors) dst[(vector_base + 7)*rows + row] = r7; \
+    } \
+} while (0)
+#define NVFP4_STORE_X16(values) do { \
+    const float r0 = sub_group_reduce_add((values).s0); \
+    const float r1 = sub_group_reduce_add((values).s1); \
+    const float r2 = sub_group_reduce_add((values).s2); \
+    const float r3 = sub_group_reduce_add((values).s3); \
+    const float r4 = sub_group_reduce_add((values).s4); \
+    const float r5 = sub_group_reduce_add((values).s5); \
+    const float r6 = sub_group_reduce_add((values).s6); \
+    const float r7 = sub_group_reduce_add((values).s7); \
+    const float r8 = sub_group_reduce_add((values).s8); \
+    const float r9 = sub_group_reduce_add((values).s9); \
+    const float ra = sub_group_reduce_add((values).sa); \
+    const float rb = sub_group_reduce_add((values).sb); \
+    const float rc = sub_group_reduce_add((values).sc); \
+    const float rd = sub_group_reduce_add((values).sd); \
+    const float re = sub_group_reduce_add((values).se); \
+    const float rf = sub_group_reduce_add((values).sf); \
+    if (lane == 0) { \
+        dst[(vector_base + 0)*rows + row] = r0; \
+        if (vector_base + 1 < vectors) dst[(vector_base + 1)*rows + row] = r1; \
+        if (vector_base + 2 < vectors) dst[(vector_base + 2)*rows + row] = r2; \
+        if (vector_base + 3 < vectors) dst[(vector_base + 3)*rows + row] = r3; \
+        if (vector_base + 4 < vectors) dst[(vector_base + 4)*rows + row] = r4; \
+        if (vector_base + 5 < vectors) dst[(vector_base + 5)*rows + row] = r5; \
+        if (vector_base + 6 < vectors) dst[(vector_base + 6)*rows + row] = r6; \
+        if (vector_base + 7 < vectors) dst[(vector_base + 7)*rows + row] = r7; \
+        if (vector_base + 8 < vectors) dst[(vector_base + 8)*rows + row] = r8; \
+        if (vector_base + 9 < vectors) dst[(vector_base + 9)*rows + row] = r9; \
+        if (vector_base + 10 < vectors) dst[(vector_base + 10)*rows + row] = ra; \
+        if (vector_base + 11 < vectors) dst[(vector_base + 11)*rows + row] = rb; \
+        if (vector_base + 12 < vectors) dst[(vector_base + 12)*rows + row] = rc; \
+        if (vector_base + 13 < vectors) dst[(vector_base + 13)*rows + row] = rd; \
+        if (vector_base + 14 < vectors) dst[(vector_base + 14)*rows + row] = re; \
+        if (vector_base + 15 < vectors) dst[(vector_base + 15)*rows + row] = rf; \
+    } \
+} while (0)
+
+#define DEFINE_NVFP4_REGISTER_GEMM(name, vector_type, vector_tile, load_x, store_x) \
+__attribute__((qcom_reqd_sub_group_size("half"))) \
+kernel void name( \
+    global const uchar * packed, global const uchar * scales, \
+    global const float * x, global float * dst, int cols, int rows, \
+    int vectors, float inv_weight_global_scale) { \
+    const int row = get_group_id(0); \
+    const int vector_base = get_group_id(1)*(vector_tile); \
+    const int lane = get_sub_group_local_id(); \
+    if (row >= rows || vector_base >= vectors) return; \
+    const int packed_stride = cols/2; \
+    const int scale_stride = cols/QK_NVFP4_SUB; \
+    global const uchar * wr = packed + row*packed_stride; \
+    global const uchar * sr = scales + row*scale_stride; \
+    vector_type sums = (vector_type)(0.0f); \
+    for (int block = lane; block < scale_stride; \
+         block += NVFP4_SUBGROUP_WIDTH) { \
+        const float d = e4m3_scale_to_fp32(sr[block]) * \
+            inv_weight_global_scale; \
+        const int qbase = block*(QK_NVFP4_SUB/2); \
+        const int xbase = block*QK_NVFP4_SUB; \
+        _Pragma("unroll") \
+        for (int j = 0; j < QK_NVFP4_SUB/2; ++j) { \
+            const uchar qv = wr[qbase + j]; \
+            const float low = d*kvalues_nvfp4_f[qv & 0x0F]; \
+            const float high = d*kvalues_nvfp4_f[qv >> 4]; \
+            sums += low*load_x(xbase + 2*j); \
+            sums += high*load_x(xbase + 2*j + 1); \
+        } \
+    } \
+    store_x(sums); \
+}
+
+DEFINE_NVFP4_REGISTER_GEMM(
+    nvfp4_native_gemm_lab_register_2, float2, 2, NVFP4_LOAD_X2, NVFP4_STORE_X2)
+DEFINE_NVFP4_REGISTER_GEMM(
+    nvfp4_native_gemm_lab_register_4, float4, 4, NVFP4_LOAD_X4, NVFP4_STORE_X4)
+DEFINE_NVFP4_REGISTER_GEMM(
+    nvfp4_native_gemm_lab_register_8, float8, 8, NVFP4_LOAD_X8, NVFP4_STORE_X8)
+DEFINE_NVFP4_REGISTER_GEMM(
+    nvfp4_native_gemm_lab_register_16, float16, 16, NVFP4_LOAD_X16, NVFP4_STORE_X16)
+DEFINE_NVFP4_REGISTER_GEMM(
+    nvfp4_native_gemm_lab_register_transposed_2,
+    float2, 2, NVFP4_LOAD_TX2, NVFP4_STORE_X2)
+DEFINE_NVFP4_REGISTER_GEMM(
+    nvfp4_native_gemm_lab_register_transposed_4,
+    float4, 4, NVFP4_LOAD_TX4, NVFP4_STORE_X4)
+DEFINE_NVFP4_REGISTER_GEMM(
+    nvfp4_native_gemm_lab_register_transposed_8,
+    float8, 8, NVFP4_LOAD_TX8, NVFP4_STORE_X8)
+DEFINE_NVFP4_REGISTER_GEMM(
+    nvfp4_native_gemm_lab_register_transposed_16,
+    float16, 16, NVFP4_LOAD_TX16, NVFP4_STORE_X16)
+
+#undef DEFINE_NVFP4_REGISTER_GEMM
+#undef NVFP4_STORE_X16
+#undef NVFP4_STORE_X8
+#undef NVFP4_STORE_X4
+#undef NVFP4_STORE_X2
+#undef NVFP4_LOAD_X16
+#undef NVFP4_LOAD_X8
+#undef NVFP4_LOAD_X4
+#undef NVFP4_LOAD_X2
+#undef NVFP4_LOAD_TX16
+#undef NVFP4_LOAD_TX8
+#undef NVFP4_LOAD_TX4
+#undef NVFP4_LOAD_TX2
+
 // FP8 E4M3 companion kernels support the dense checkpoint's BF16 row scales
 // (scale_kind=0) and the MoE checkpoint's exact scalar FP32 scale (kind=1).
 static inline float fp8_matrix_scale(

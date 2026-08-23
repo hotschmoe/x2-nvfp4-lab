@@ -3,6 +3,10 @@
 Checkpoint-native NVFP4 inference research for the Snapdragon X2 Elite Extreme:
 make it work, make it right, then make it fast.
 
+The 2026-08-22 campaign is now intentionally closed. Read
+[SESSION_HANDOFF_2026-08-22.md](SESSION_HANDOFF_2026-08-22.md) for the measured
+end state, exact restart point, and prioritized future experiments.
+
 The project is building a Windows ARM64 runtime that serves dense Qwen3.5 27B
 and sparse Qwen3.5-MoE 35B-class checkpoints without GGUF or persistent
 dequantized weight copies. vLLM remains the scheduler/API boundary; the native
@@ -62,6 +66,11 @@ Current highlights on an Adreno X2-90:
   dense GEMM and improves the current full-row local kernel by **1.11-1.49x**.
   Unlike decode, direct-global vector decode wins; short-K MoE down crosses back
   to the production local kernel at eight vectors.
+- A final true-reuse treatment decodes each weight once across a register
+  microtile. Corrected opposite-order runs reach **185.7 GFLOP/s** on dense
+  gate (1.222x at eight vectors), **212.1 GFLOP/s** on MoE gate, and a 1.716x
+  speedup on short-K MoE down. It is correctness-gated but deliberately remains
+  a lab kernel until a real multi-token prefill graph proves TTFT improvement.
 - Promoting the proven decode shapes cuts the dense NVFP4-linear trace from
   284.31 to **196.86 ms** and full-token wall from 520.62 to **436.06 ms**.
   NVFP4 useful delivery is now 42.8 GB/s, or 33.2% of the matched 129 GB/s
