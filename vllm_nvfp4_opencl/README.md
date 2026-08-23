@@ -29,6 +29,9 @@ The current boundary is deliberately explicit:
   attention/NVFP4 MLP projections are implemented.
 - Paged attention accepts both exact Qwen3.5 head profiles: dense 24/4 and MoE
   16/2, with independently selectable FP32 or BF16 K/V storage.
+- Gated-delta preparation accepts dense 16-key/48-value heads and MoE
+  16-key/32-value heads; the resident graph sizes convolution/recurrent state
+  from that profile rather than assuming the dense model.
 - Sampling, preemption/state transfer, and automatic OOT model-runner attachment
   are not yet implemented.
 

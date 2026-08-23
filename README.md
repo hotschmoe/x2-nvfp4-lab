@@ -30,6 +30,8 @@ Current highlights on an Adreno X2-90:
 - The 35B path now has an exact complete full-attention + MoE decoder layer:
   tensor-scaled FP8 attention, BF16 paged KV, GPU top-8, shared/routed NVFP4
   experts, both residuals, 1.392 ms kernel / 1.555 ms wall.
+- Its real 3-linear + 1-full four-layer sparse cadence is now resident too:
+  four expert banks, all recurrent/KV state, 6.417 ms kernel / 6.867 ms wall.
 - Independent CPU/GPU tensor oracles and isolated-process accelerator gates.
 
 Start with [CAMPAIGN_BANDWIDTH_FIRST.md](CAMPAIGN_BANDWIDTH_FIRST.md) and

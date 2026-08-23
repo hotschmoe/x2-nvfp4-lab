@@ -1,0 +1,133 @@
+{
+  "campaign": "bandwidth-first",
+  "schema_version": 1,
+  "timestamp": "2026-08-22T21:05:41-07:00",
+  "hardware": {
+    "system_model": "ASUS Zenbook A16 UX3607OA",
+    "gpu": "Qualcomm(R) Adreno(TM) X2-90 GPU"
+  },
+  "environment": {
+    "power_source": "AC",
+    "battery_percent": 100,
+    "thermal_regime": "warm-burst"
+  },
+  "workload": {
+    "operation": "ornith_35b_exact_four_layer_sparse_cadence",
+    "layers": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "layer_types": [
+      "linear",
+      "linear",
+      "linear",
+      "full"
+    ],
+    "kv_dtype": "bf16",
+    "resident_expert_bank_payload_bytes": 1819017216
+  },
+  "loading": {
+    "load_seconds": 1.7864741999655962,
+    "available_before_bytes": 39045132288,
+    "available_after_bytes": 37051854848
+  },
+  "timing": {
+    "warmups": 5,
+    "samples": 30,
+    "kernel_ms": {
+      "median": 6.416600000000001,
+      "p10": 6.38296,
+      "p90": 6.50784,
+      "minimum": 6.3581,
+      "maximum": 6.9164
+    },
+    "wall_ms": {
+      "median": 6.86745,
+      "p10": 6.65105,
+      "p90": 7.2548,
+      "minimum": 6.6196,
+      "maximum": 8.0837
+    },
+    "layer_synchronized_oracle_kernel_ms": 6.4582,
+    "first_queued_kernel_ms": 6.386
+  },
+  "correctness": {
+    "passed": true,
+    "maximum_absolute_error_vs_layer_synchronized_device_oracle": 0.0,
+    "finite_outputs": true,
+    "explicit_completion_marker": true
+  },
+  "limitations": [
+    "one-token four-layer cadence with zero recurrent/conv initial states",
+    "device oracle synchronizes identical proven layer kernels after each layer",
+    "complete 40-layer residency, final head, sampling, and serving are excluded"
+  ],
+  "samples": {
+    "kernel_ms": [
+      6.3843,
+      6.3899,
+      6.3616,
+      6.3902,
+      6.4006,
+      6.3709,
+      6.4386,
+      6.9164,
+      6.5,
+      6.4689,
+      6.5027,
+      6.3909,
+      6.3977,
+      6.413,
+      6.4057,
+      6.4202,
+      6.4917,
+      6.485,
+      6.5541,
+      6.4501,
+      6.8286,
+      6.4694,
+      6.4247,
+      6.3581,
+      6.4123,
+      6.395,
+      6.3927,
+      6.4055,
+      6.47,
+      6.4293
+    ],
+    "wall_ms": [
+      6.647,
+      6.6597,
+      6.6196,
+      6.6515,
+      6.6648,
+      6.7397,
+      6.9344,
+      7.3642,
+      6.9486,
+      6.9594,
+      6.9692,
+      6.8814,
+      6.8404,
+      6.8557,
+      6.8344,
+      6.946,
+      6.9485,
+      6.9051,
+      6.9986,
+      7.243,
+      7.361,
+      8.0837,
+      6.7526,
+      6.6226,
+      6.8224,
+      6.8111,
+      6.9468,
+      6.8256,
+      6.8792,
+      6.833
+    ]
+  }
+}

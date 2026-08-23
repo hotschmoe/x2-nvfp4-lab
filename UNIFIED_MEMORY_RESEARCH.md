@@ -6,16 +6,17 @@ Execution plan: [Campaign: Bandwidth First](CAMPAIGN_BANDWIDTH_FIRST.md)
 
 ## Executive conclusion
 
-The next runtime milestone is not a larger model allocation or another broad
-backend integration. It is a measured, shared-memory execution foundation:
+The runtime now has a measured, shared-memory execution foundation. Its next
+milestone is to turn the proven four-layer sparse cadence into a complete,
+budget-qualified token step:
 
-1. characterize the CPU, GPU, and eventually NPU memory-controller islands;
-2. replace copied OpenCL weight buffers with fine-grained SVM allocations that
-   the CPU and GPU can consume directly;
-3. raise the direct Adreno kernels toward their measured island bandwidth;
-4. use CPU+GPU co-execution for prefill and only for decode when concurrent
-   measurements prove that it adds bandwidth or useful throughput;
-5. place this executor behind the existing vLLM scheduler adapter.
+1. build the complete 40-layer matrix/state registry under the measured OpenCL
+   and Windows headroom policy;
+2. add final norm, LM head, sampling, and tokenizer-facing request plumbing;
+3. qualify full-checkpoint residency or select a measured expert-cache policy;
+4. preserve the one-queue device cadence through the existing vLLM adapter;
+5. then compare vLLM, SGLang, and Atlas control-plane behavior on the same native
+   executor.
 
 The machine has a nominal 228 GB/s memory interface, but that number is the
 aggregate LPDDR pin rate for the SoC. It is not evidence that one Adreno kernel,
@@ -549,40 +550,43 @@ The earlier crashes make benchmark containment part of the architecture:
 
 Prioritized next questions, including work not yet performed:
 
-1. **Further MoE fusion.** Device-resident 256-way top-8 and contiguous-bank
+1. **Complete 40-layer token boundary.** Build the full matrix/state registry,
+   add final norm, tensor-scaled FP8 LM head, sampling, and measure a real
+   checkpoint token before promoting any ten-cadence projection.
+2. **Further MoE fusion.** Device-resident 256-way top-8 and contiguous-bank
    dispatch now pass. Next compare fused gate/up, SiLU/down, shared-slot, and
    weighted-reduction variants, and expose per-kernel component timing.
-2. **Atlas kernel and graph structure.** Audit its open-source Qwen3.5/GB10 MoE,
+3. **Atlas kernel and graph structure.** Audit its open-source Qwen3.5/GB10 MoE,
    recurrent-layer, paged-KV, CUDA-graph, and MTP paths for reusable scheduling
    patterns, while separating CUDA/SM121-only techniques from portable ones.
-3. **MLX allocator and scheduling internals.** Trace how locationless arrays,
+4. **MLX allocator and scheduling internals.** Trace how locationless arrays,
    stream dependencies, batched `eval`, buffer reuse, and wired-memory limits
    avoid redundant materialization; test equivalent lifetime classes in the
    SVM arena.
-4. **vLLM versus SGLang control-plane A/B.** Once a complete native token step
+5. **vLLM versus SGLang control-plane A/B.** Once a complete native token step
    exists, put the same executor behind each scheduler and compare request
    admission, prefix reuse, continuous batching, cancellation, structured
    output, and coding-client compatibility. Backend replacement is not useful
    before this common native boundary exists.
-5. **Memory pressure beyond 8 GiB.** The real 1/2/4/8 GiB-class SVM ladder passes
+6. **Memory pressure beyond 8 GiB.** The real 1/2/4/8 GiB-class SVM ladder passes
    through 19 banks/8.64 GB and releases 8.54 GB immediately. The exact
    checkpoint/state inventory is now complete; next execute 24/30/35/40-bank
    gates while adding non-expert weights and serving state in policy order.
-6. **Expert residency policy.** Measure per-layer routing locality over real
+7. **Expert residency policy.** Measure per-layer routing locality over real
    coding traces, determine whether all 256 experts fit inside the safe OpenCL
    budget, and compare full residency, layer streaming, and frequency-aware
    caching.
-7. **MTP speculative decode.** Identify the checkpoint's exact MTP graph, build
+8. **MTP speculative decode.** Identify the checkpoint's exact MTP graph, build
    an acceptance-correct device path, and measure accepted tokens per expensive
    main-model weight stream.
-8. **NPU registered memory.** Measure whether QAIRT/QNN can consume a registered
+9. **NPU registered memory.** Measure whether QAIRT/QNN can consume a registered
    view of the same underlying allocation, its dispatch floor, and contention
    with Adreno and Oryon before assigning it any production work.
-9. **Sustained thermal behavior and counters.** Add cooldown/sustained protocols
+10. **Sustained thermal behavior and counters.** Add cooldown/sustained protocols
    and obtain Qualcomm compiler/occupancy/memory-counter evidence so the gap
    between 34.22 GB/s useful NVFP4 delivery and the 129 GB/s raw ceiling can be
    attributed rather than guessed.
-10. **KV precision and long-context quality.** BF16 now covers dense and MoE
+11. **KV precision and long-context quality.** BF16 now covers dense and MoE
     head profiles. Next compare FP32/BF16/FP8 perplexity and coding-task behavior
     at 32K/64K/128K with prefix reuse and concurrent requests.
 
@@ -625,10 +629,11 @@ must pass an end-to-end long-context quality gate before it can unlock dense
 64K or higher concurrency.
 
 The BF16 storage path now passes both exact head profiles: dense 24/4 and MoE
-16/2. Dense also passes four-layer batch-one/four cadence and vLLM lifecycle;
-MoE passes real tensor-scaled-FP8 attention and a complete full-attention plus
-device-routed-expert decoder layer. Both remain opt-in pending complete-model
-and long-context qualification.
+16/2. Dense also passes four-layer batch-one/four cadence and vLLM lifecycle.
+MoE now passes both complete layer types and its real three-linear/one-full
+cadence with four independent resident expert banks: 6.4166 ms kernel and
+6.8675 ms queued wall. Both remain opt-in pending complete-model and
+long-context qualification.
 
 This policy borrows MLX's useful lifetime principle rather than its API: keep
 locationless/lazy data such as embeddings from being eagerly materialized, and

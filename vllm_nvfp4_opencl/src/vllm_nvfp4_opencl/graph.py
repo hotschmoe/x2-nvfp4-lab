@@ -243,22 +243,27 @@ class ResidentQwen35LinearAttention:
         recurrent_state: np.ndarray | None = None,
         conv_state: np.ndarray | None = None,
         epsilon: float = 1e-6,
+        hidden: int = 5120,
+        key_heads: int = 16,
+        value_heads: int = 48,
     ):
-        hidden = 5120
-        value_width = 48 * 128
+        if key_heads <= 0 or value_heads <= 0 or value_heads % key_heads:
+            raise ValueError("value_heads must be divisible by key_heads")
+        value_width = value_heads * 128
+        mixed_width = (2 * key_heads + value_heads) * 128
         if (
-            (in_proj_qkv.rows, in_proj_qkv.cols) != (10240, hidden)
+            (in_proj_qkv.rows, in_proj_qkv.cols) != (mixed_width, hidden)
             or (in_proj_z.rows, in_proj_z.cols) != (value_width, hidden)
             or (out_proj.rows, out_proj.cols) != (hidden, value_width)
         ):
             raise ValueError("FP8 matrices do not match Qwen3.5 linear attention")
         expected = {
             "input_norm_weight": (hidden,),
-            "a_weight": (48, hidden),
-            "b_weight": (48, hidden),
-            "a_log": (48,),
-            "dt_bias": (48,),
-            "conv_weight": (10240, 4),
+            "a_weight": (value_heads, hidden),
+            "b_weight": (value_heads, hidden),
+            "a_log": (value_heads,),
+            "dt_bias": (value_heads,),
+            "conv_weight": (mixed_width, 4),
             "gated_norm_weight": (128,),
         }
         arrays = {
@@ -285,6 +290,9 @@ class ResidentQwen35LinearAttention:
         self.in_proj_qkv = in_proj_qkv
         self.in_proj_z = in_proj_z
         self.out_proj = out_proj
+        self.hidden = hidden
+        self.key_heads = key_heads
+        self.value_heads = value_heads
         self.epsilon = epsilon
         self._closed = False
         self._buffers: list[DeviceBuffer] = []
@@ -312,21 +320,21 @@ class ResidentQwen35LinearAttention:
         self.dt_bias = upload(dt_bias)
         self.gated_norm_weight = upload(gated_norm_weight)
         self.normalized = create(hidden)
-        self.mixed_qkv = create(10240)
-        self.convolved_qkv = create(10240)
+        self.mixed_qkv = create(mixed_width)
+        self.convolved_qkv = create(mixed_width)
         self.z = create(value_width)
-        self.a = create(48)
-        self.b = create(48)
+        self.a = create(value_heads)
+        self.b = create(value_heads)
         self.q = create(value_width)
         self.k = create(value_width)
         self.v = create(value_width)
-        self.g = create(48)
-        self.beta = create(48)
+        self.g = create(value_heads)
+        self.beta = create(value_heads)
         self.recurrent_output = create(value_width)
         self.gated_output = create(value_width)
         self.attention_output = create(hidden)
         self.recurrent_state = runtime.create_gated_delta_state(
-            48, recurrent_state
+            value_heads, recurrent_state
         )
         self._states.append(self.recurrent_state)
         self.conv_state = runtime.create_causal_conv_state(
@@ -349,14 +357,14 @@ class ResidentQwen35LinearAttention:
     def enqueue(self, x: DeviceBuffer, out: DeviceBuffer) -> DeviceBuffer:
         if self._closed:
             raise RuntimeError("resident linear-attention layer is closed")
-        hidden_bytes = 5120 * np.dtype(np.float32).itemsize
+        hidden_bytes = self.hidden * np.dtype(np.float32).itemsize
         if x.bytes < hidden_bytes or out.bytes < hidden_bytes:
             raise ValueError("input/output buffer is smaller than hidden size")
         self.runtime.rmsnorm_device(
             x,
             self.input_norm_weight,
             1,
-            5120,
+            self.hidden,
             self.epsilon,
             self.normalized,
         )
@@ -382,15 +390,23 @@ class ResidentQwen35LinearAttention:
             out=self.attention_output,
             enqueue=True,
         )
-        return self.runtime.add_device(x, self.attention_output, 5120, out)
+        return self.runtime.add_device(x, self.attention_output, self.hidden, out)
 
     def enqueue_state_from_projected(self) -> DeviceBuffer:
         """Run request-specific recurrent work after batched QKV/Z projection."""
         self.runtime.f32_gemv_device(
-            self.a_weight, self.normalized, 48, 5120, self.a
+            self.a_weight,
+            self.normalized,
+            self.value_heads,
+            self.hidden,
+            self.a,
         )
         self.runtime.f32_gemv_device(
-            self.b_weight, self.normalized, 48, 5120, self.b
+            self.b_weight,
+            self.normalized,
+            self.value_heads,
+            self.hidden,
+            self.b,
         )
         self.runtime.causal_conv_silu_device(
             self.conv_state, self.mixed_qkv, 1, self.convolved_qkv
@@ -406,6 +422,8 @@ class ResidentQwen35LinearAttention:
             self.v,
             self.g,
             self.beta,
+            self.key_heads,
+            self.value_heads,
         )
         self.runtime.gated_delta_device(
             self.recurrent_state,
@@ -421,7 +439,7 @@ class ResidentQwen35LinearAttention:
             self.recurrent_output,
             self.z,
             self.gated_norm_weight,
-            48,
+            self.value_heads,
             128,
             self.epsilon,
             self.gated_output,

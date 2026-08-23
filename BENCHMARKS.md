@@ -513,3 +513,40 @@ still excluded. Canonical artifacts:
 - `20260822-205343-046114-moe-full-attention-fp32.json`
 - `20260822-205622-626682-moe-full-layer.json`
 - `20260822-205634-208981-moe-full-layer.json`
+
+## Exact 35B MoE linear layer and four-layer cadence
+
+The gated-delta preparation and resident graph are now parameterized for both
+Qwen profiles: dense uses 16 key heads and 48 value heads, while Ornith uses 16
+key heads and 32 value heads. A real Ornith layer-0 decode step now includes
+input RMSNorm, tensor-scaled FP8 projections, causal convolution, recurrent
+gated-delta update, output projection, the first residual, post-attention norm,
+device top-8 routing, the shared and routed NVFP4 experts, and the second
+residual.
+
+| Complete layer | Expert-bank payload | Median kernel | Median wall | Max abs vs independent CPU oracle |
+|---|---:|---:|---:|---:|
+| Linear attention + MoE, layer 0 | 454,754,304 B | 1.6442 ms | 1.8166 ms | `3.58e-7` |
+
+Layers 0 through 3 were then composed in their checkpoint cadence: three
+linear-attention layers followed by one BF16-KV full-attention layer. Each layer
+owns an independent 256+shared expert bank; the four bank payloads total
+1,819,017,216 bytes. All recurrent, convolution, and KV state remains resident,
+and the complete block is queued before one synchronization.
+
+| Real layers | Bank load | Median kernel | Median queued wall | Error vs synchronized device-layer oracle |
+|---|---:|---:|---:|---:|
+| 0-3: linear, linear, linear, full | 1.786 s | 6.4166 ms | 6.8675 ms | `0` |
+
+Repeating that measured kernel time ten times gives a planning-only arithmetic
+projection of 64.166 ms, or about 15.58 decode tokens/s. It is not a full-model
+benchmark: the final norm, LM head, sampling, complete 40-layer registry, memory
+pressure, and scheduler overhead are still excluded. Each layer operator also
+has an independent CPU oracle; the zero-error cadence comparison specifically
+checks that queued composition matches those same proven layers synchronized
+one at a time.
+
+Canonical artifacts:
+
+- `20260822-210348-345022-moe-linear-full-layer.json`
+- `20260822-210541-006599-moe-cadence.json`

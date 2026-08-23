@@ -789,9 +789,8 @@ kernel void moe_bank_reduce_f32(
     }
 }
 
-// Converts the native Qwen3.5 projection/conv layout
-// [16*128 query, 16*128 key, 48*128 value] into the 48-head recurrent layout,
-// repeating key heads three times and normalizing Q/K exactly once on device.
+// Converts [key_heads*128 Q, key_heads*128 K, value_heads*128 V] into the
+// value-head recurrent layout, repeating Q/K heads as needed.
 __attribute__((reqd_work_group_size(NVFP4_SUBGROUP_WIDTH, 1, 1)))
 __attribute__((qcom_reqd_sub_group_size("half")))
 kernel void qwen35_prepare_gated_delta_decode_f32(
@@ -804,16 +803,20 @@ kernel void qwen35_prepare_gated_delta_decode_f32(
     global float * k,
     global float * v,
     global float * g,
-    global float * beta
+    global float * beta,
+    uint key_heads,
+    uint value_heads
 ) {
     const uint head = get_group_id(0);
     const uint lane = get_sub_group_local_id();
-    const uint source_head = head/3;
+    const uint source_head = head/(value_heads/key_heads);
+    const uint key_offset = key_heads*128;
+    const uint value_offset = 2*key_heads*128;
     float q_sum = 0.0f;
     float k_sum = 0.0f;
     for (uint col = lane; col < 128; col += NVFP4_SUBGROUP_WIDTH) {
         const float q_value = mixed_qkv[source_head*128 + col];
-        const float k_value = mixed_qkv[2048 + source_head*128 + col];
+        const float k_value = mixed_qkv[key_offset + source_head*128 + col];
         q_sum += q_value*q_value;
         k_sum += k_value*k_value;
     }
@@ -824,8 +827,9 @@ kernel void qwen35_prepare_gated_delta_decode_f32(
     for (uint col = lane; col < 128; col += NVFP4_SUBGROUP_WIDTH) {
         const uint output_index = head*128 + col;
         q[output_index] = mixed_qkv[source_head*128 + col]*inverse_q;
-        k[output_index] = mixed_qkv[2048 + source_head*128 + col]*inverse_k;
-        v[output_index] = mixed_qkv[4096 + output_index];
+        k[output_index] =
+            mixed_qkv[key_offset + source_head*128 + col]*inverse_k;
+        v[output_index] = mixed_qkv[value_offset + output_index];
     }
     if (lane == 0) {
         const float step = a[head] + dt_bias[head];

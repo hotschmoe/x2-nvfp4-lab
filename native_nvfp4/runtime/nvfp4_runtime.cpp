@@ -2420,9 +2420,34 @@ qwen35_prepare_gated_delta_decode_device_enqueue_f32(
     nvfp4_buffer * v,
     nvfp4_buffer * g,
     nvfp4_buffer * beta) {
-    constexpr size_t mixed_bytes = 10240u*sizeof(float);
-    constexpr size_t vector_bytes = 48u*128u*sizeof(float);
-    constexpr size_t scalar_bytes = 48u*sizeof(float);
+    return qwen35_prepare_gated_delta_decode_configured_enqueue_f32(
+        runtime, mixed_qkv, a, b, a_log, dt_bias, q, k, v, g, beta, 16, 48);
+}
+
+extern "C" NVFP4_API nvfp4_status
+qwen35_prepare_gated_delta_decode_configured_enqueue_f32(
+    nvfp4_runtime * runtime,
+    const nvfp4_buffer * mixed_qkv,
+    const nvfp4_buffer * a,
+    const nvfp4_buffer * b,
+    const nvfp4_buffer * a_log,
+    const nvfp4_buffer * dt_bias,
+    nvfp4_buffer * q,
+    nvfp4_buffer * k,
+    nvfp4_buffer * v,
+    nvfp4_buffer * g,
+    nvfp4_buffer * beta,
+    int key_heads,
+    int value_heads) {
+    if (key_heads <= 0 || value_heads <= 0 || value_heads > 64 ||
+        value_heads % key_heads != 0) {
+        return fail_invalid("invalid Qwen3.5 gated-delta head configuration");
+    }
+    const size_t mixed_bytes =
+        static_cast<size_t>(2*key_heads + value_heads)*128u*sizeof(float);
+    const size_t vector_bytes =
+        static_cast<size_t>(value_heads)*128u*sizeof(float);
+    const size_t scalar_bytes = static_cast<size_t>(value_heads)*sizeof(float);
     if (!runtime || !mixed_qkv || mixed_qkv->runtime != runtime || !a ||
         a->runtime != runtime || !b || b->runtime != runtime || !a_log ||
         a_log->runtime != runtime || !dt_bias || dt_bias->runtime != runtime ||
@@ -2447,8 +2472,16 @@ qwen35_prepare_gated_delta_decode_device_enqueue_f32(
                                     sizeof(cl_mem), &arguments[arg]),
                      "clSetKernelArg(prepare_gated_delta)");
         }
+        const cl_uint key_heads_arg = static_cast<cl_uint>(key_heads);
+        const cl_uint value_heads_arg = static_cast<cl_uint>(value_heads);
+        check_cl(clSetKernelArg(runtime->qwen35_prepare_gated_delta, 10,
+                                sizeof(key_heads_arg), &key_heads_arg),
+                 "clSetKernelArg(prepare_gated_delta_key_heads)");
+        check_cl(clSetKernelArg(runtime->qwen35_prepare_gated_delta, 11,
+                                sizeof(value_heads_arg), &value_heads_arg),
+                 "clSetKernelArg(prepare_gated_delta_value_heads)");
         const size_t local = 64;
-        const size_t global = 48u*local;
+        const size_t global = static_cast<size_t>(value_heads)*local;
         event_owner event;
         check_cl(clEnqueueNDRangeKernel(runtime->queue,
                                         runtime->qwen35_prepare_gated_delta,

@@ -163,13 +163,14 @@ Completed since the initial boundary was written:
 
 The next implementation boundary is now:
 
-1. Implement one-token full attention on device: RoPE, per-request grouped-query
-   KV cache, stable softmax, value reduction, and output projection.
-2. Chain three resident linear-attention layers plus one full-attention layer and
-   their MLPs as the real four-layer cadence, synchronizing once per token.
-3. Add a budget-aware matrix registry and per-request state arena; validate
-   incremental 1/2/4/8 GiB weight residency before attempting the full model.
-4. Expose `prefill` and continuous-batch `decode` calls through a vLLM OOT worker.
+1. Expand the proven four-layer sparse cadence into a budget-aware 40-layer
+   matrix registry and per-request state arena.
+2. Add final RMSNorm, tensor-scaled FP8 LM head, sampling, and tokenizer-facing
+   request plumbing for the first complete checkpoint token.
+3. Execute staged 24/30/35/40-bank residency gates while adding non-expert
+   weights, KV, recurrent state, and reusable scratch in policy order.
+4. Connect the complete token boundary to continuous batching in the vLLM OOT
+   worker, then compare its control plane with SGLang and Atlas.
 5. Move HTP QHPI skeleton generation to an x86-64 Python 3.10 build host, then
    implement scalar correctness and HVX/HMX optimization for Hexagon v81.
 
@@ -260,8 +261,22 @@ format added, real layer-3 full attention measures 0.6309 ms kernel / 0.8407 ms
 wall using BF16 KV. Composing it with post-attention norm and the resident
 device-routed expert bank produces the first complete sparse decoder layer at
 1.3923 ms kernel / 1.5549 ms wall and `5.96e-8` maximum oracle error. This closes
-the full-attention MoE layer arithmetic boundary; full-model cadence/residency
-and MoE linear-attention layers remain open.
+the full-attention MoE layer arithmetic boundary.
+
+Ornith's 16-key/32-value-head gated-delta profile is now represented directly
+rather than reusing the dense model's 16/48 shape. A complete real layer-0
+linear-attention plus MoE step measures 1.6442 ms kernel / 1.8166 ms wall and
+matches its independent CPU oracle within `3.58e-7`. The checkpoint's true
+layers 0-3 cadence (linear, linear, linear, full) holds four independent expert
+banks totaling 1,819,017,216 bytes plus every recurrent, convolution, and BF16
+KV state. Queued behind one synchronization it measures 6.4166 ms kernel /
+6.8675 ms wall and exactly matches the same proven device layers synchronized
+individually.
+
+Ten measured four-layer kernels arithmetically project to 64.166 ms, or about
+15.58 decode tokens/s, but this is not yet a full-model measurement. Final norm,
+LM head, sampling, the complete 40-layer registry, full-checkpoint memory
+pressure, and serving-control overhead remain open.
 
 ## First decoder benchmarks
 

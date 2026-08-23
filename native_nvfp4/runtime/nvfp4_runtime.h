@@ -372,6 +372,21 @@ NVFP4_API nvfp4_status qwen35_prepare_gated_delta_decode_device_enqueue_f32(
     nvfp4_buffer * g,
     nvfp4_buffer * beta);
 
+NVFP4_API nvfp4_status qwen35_prepare_gated_delta_decode_configured_enqueue_f32(
+    nvfp4_runtime * runtime,
+    const nvfp4_buffer * mixed_qkv,
+    const nvfp4_buffer * a,
+    const nvfp4_buffer * b,
+    const nvfp4_buffer * a_log,
+    const nvfp4_buffer * dt_bias,
+    nvfp4_buffer * q,
+    nvfp4_buffer * k,
+    nvfp4_buffer * v,
+    nvfp4_buffer * g,
+    nvfp4_buffer * beta,
+    int key_heads,
+    int value_heads);
+
 NVFP4_API nvfp4_status nvfp4_rmsnorm_silu_gate_device_enqueue_f32(
     nvfp4_runtime * runtime,
     const nvfp4_buffer * x,

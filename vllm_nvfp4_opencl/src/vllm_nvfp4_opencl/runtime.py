@@ -583,6 +583,14 @@ class Runtime:
         self.lib.qwen35_prepare_gated_delta_decode_device_enqueue_f32.restype = (
             C.c_int
         )
+        self.lib.qwen35_prepare_gated_delta_decode_configured_enqueue_f32.argtypes = [
+            *self.lib.qwen35_prepare_gated_delta_decode_device_enqueue_f32.argtypes,
+            C.c_int,
+            C.c_int,
+        ]
+        self.lib.qwen35_prepare_gated_delta_decode_configured_enqueue_f32.restype = (
+            C.c_int
+        )
         self.lib.nvfp4_rmsnorm_silu_gate_device_enqueue_f32.argtypes = [
             C.c_void_p,
             C.c_void_p,
@@ -1279,9 +1287,18 @@ class Runtime:
         v: DeviceBuffer,
         g: DeviceBuffer,
         beta: DeviceBuffer,
+        key_heads: int = 16,
+        value_heads: int = 48,
     ) -> None:
+        if (
+            key_heads <= 0
+            or value_heads <= 0
+            or value_heads > 64
+            or value_heads % key_heads
+        ):
+            raise ValueError("value_heads must be divisible by valid key_heads")
         self._check(
-            self.lib.qwen35_prepare_gated_delta_decode_device_enqueue_f32(
+            self.lib.qwen35_prepare_gated_delta_decode_configured_enqueue_f32(
                 self.handle,
                 mixed_qkv.handle,
                 a.handle,
@@ -1293,8 +1310,10 @@ class Runtime:
                 v.handle,
                 g.handle,
                 beta.handle,
+                key_heads,
+                value_heads,
             ),
-            "qwen35_prepare_gated_delta_decode_device_enqueue_f32",
+            "qwen35_prepare_gated_delta_decode_configured_enqueue_f32",
         )
 
     def rmsnorm_silu_gate_device(
