@@ -144,6 +144,13 @@ nvfp4_status fail_invalid(const char * message) {
     return NVFP4_STATUS_INVALID_ARGUMENT;
 }
 
+struct pending_profile_event {
+    cl_event event = nullptr;
+    std::string scope;
+    std::string operation;
+    bool traced = false;
+};
+
 } // namespace
 
 struct nvfp4_runtime {
@@ -204,13 +211,18 @@ struct nvfp4_runtime {
     size_t gdn_output_capacity = 0;
     size_t conv_capacity = 0;
     nvfp4_profile last_profile{};
-    std::vector<cl_event> pending_profile_events;
+    std::vector<pending_profile_event> pending_profile_events;
+    std::vector<nvfp4_trace_event> last_trace_events;
+    bool trace_enabled = false;
+    std::string trace_scope;
     std::string device_name;
     mutable std::mutex queue_mutex;
 
     ~nvfp4_runtime() {
         if (queue && !pending_profile_events.empty()) clFinish(queue);
-        for (cl_event event : pending_profile_events) clReleaseEvent(event);
+        for (const pending_profile_event & pending : pending_profile_events) {
+            if (pending.event) clReleaseEvent(pending.event);
+        }
         if (conv_output) clReleaseMemObject(conv_output);
         if (conv_input) clReleaseMemObject(conv_input);
         if (gdn_output) clReleaseMemObject(gdn_output);
@@ -548,6 +560,40 @@ uint64_t event_duration_ns(const event_owner & event) {
                                      sizeof(ended), &ended, nullptr),
              "clGetEventProfilingInfo(end)");
     return static_cast<uint64_t>(ended - started);
+}
+
+uint64_t event_timestamp_ns(
+    const event_owner & event,
+    cl_profiling_info field,
+    const char * operation) {
+    cl_ulong value = 0;
+    check_cl(clGetEventProfilingInfo(event.value, field, sizeof(value), &value,
+                                     nullptr), operation);
+    return static_cast<uint64_t>(value);
+}
+
+std::string trace_operation_name(const std::string & operation) {
+    static constexpr const char * prefix = "clEnqueueNDRangeKernel(";
+    if (operation.rfind(prefix, 0) == 0 && operation.back() == ')') {
+        return operation.substr(
+            std::strlen(prefix), operation.size() - std::strlen(prefix) - 1);
+    }
+    return operation;
+}
+
+void retain_profile_event(
+    nvfp4_runtime * runtime,
+    event_owner & event,
+    const char * operation) {
+    pending_profile_event pending;
+    pending.event = event.value;
+    pending.traced = runtime->trace_enabled;
+    if (pending.traced) {
+        pending.scope = runtime->trace_scope;
+        pending.operation = operation;
+    }
+    runtime->pending_profile_events.push_back(std::move(pending));
+    event.value = nullptr;
 }
 
 void create_svm_view(
@@ -956,19 +1002,44 @@ extern "C" NVFP4_API nvfp4_status nvfp4_runtime_synchronize(
     try {
         std::lock_guard<std::mutex> lock(runtime->queue_mutex);
         check_cl(clFinish(runtime->queue), "clFinish(runtime_synchronize)");
-        std::vector<cl_event> events = std::move(runtime->pending_profile_events);
+        std::vector<pending_profile_event> events =
+            std::move(runtime->pending_profile_events);
         runtime->pending_profile_events.clear();
+        runtime->last_trace_events.clear();
         uint64_t kernel_ns = 0;
         try {
-            for (cl_event & raw_event : events) {
+            for (pending_profile_event & pending : events) {
                 event_owner event;
-                event.value = raw_event;
-                raw_event = nullptr;
-                kernel_ns += event_duration_ns(event);
+                event.value = pending.event;
+                pending.event = nullptr;
+                const uint64_t started = event_timestamp_ns(
+                    event, CL_PROFILING_COMMAND_START,
+                    "clGetEventProfilingInfo(trace_start)");
+                const uint64_t ended = event_timestamp_ns(
+                    event, CL_PROFILING_COMMAND_END,
+                    "clGetEventProfilingInfo(trace_end)");
+                kernel_ns += ended - started;
+                if (pending.traced) {
+                    nvfp4_trace_event trace{};
+                    copy_fixed(trace.scope, sizeof(trace.scope), pending.scope);
+                    copy_fixed(
+                        trace.operation,
+                        sizeof(trace.operation),
+                        trace_operation_name(pending.operation));
+                    trace.queued_ns = event_timestamp_ns(
+                        event, CL_PROFILING_COMMAND_QUEUED,
+                        "clGetEventProfilingInfo(trace_queued)");
+                    trace.submit_ns = event_timestamp_ns(
+                        event, CL_PROFILING_COMMAND_SUBMIT,
+                        "clGetEventProfilingInfo(trace_submit)");
+                    trace.start_ns = started;
+                    trace.end_ns = ended;
+                    runtime->last_trace_events.push_back(trace);
+                }
             }
         } catch (...) {
-            for (cl_event event : events) {
-                if (event) clReleaseEvent(event);
+            for (const pending_profile_event & pending : events) {
+                if (pending.event) clReleaseEvent(pending.event);
             }
             throw;
         }
@@ -980,6 +1051,62 @@ extern "C" NVFP4_API nvfp4_status nvfp4_runtime_synchronize(
     } catch (const std::exception & error) {
         return fail(NVFP4_STATUS_INTERNAL_ERROR, error);
     }
+}
+
+extern "C" NVFP4_API nvfp4_status nvfp4_runtime_trace_set_enabled(
+    nvfp4_runtime * runtime,
+    int enabled) {
+    if (!runtime || (enabled != 0 && enabled != 1)) {
+        return fail_invalid("runtime and boolean trace state are required");
+    }
+    std::lock_guard<std::mutex> lock(runtime->queue_mutex);
+    runtime->trace_enabled = enabled != 0;
+    runtime->trace_scope.clear();
+    if (runtime->trace_enabled) runtime->last_trace_events.clear();
+    g_last_error.clear();
+    return NVFP4_STATUS_OK;
+}
+
+extern "C" NVFP4_API nvfp4_status nvfp4_runtime_trace_set_scope(
+    nvfp4_runtime * runtime,
+    const char * scope) {
+    if (!runtime || !scope) {
+        return fail_invalid("runtime and trace scope are required");
+    }
+    const size_t length = std::strlen(scope);
+    if (length >= NVFP4_TRACE_SCOPE_CAPACITY) {
+        return fail_invalid("trace scope exceeds NVFP4_TRACE_SCOPE_CAPACITY");
+    }
+    std::lock_guard<std::mutex> lock(runtime->queue_mutex);
+    if (!runtime->trace_enabled) {
+        return fail_invalid("trace scope requires tracing to be enabled");
+    }
+    runtime->trace_scope.assign(scope, length);
+    g_last_error.clear();
+    return NVFP4_STATUS_OK;
+}
+
+extern "C" NVFP4_API size_t nvfp4_runtime_trace_count(
+    const nvfp4_runtime * runtime) {
+    if (!runtime) return 0;
+    std::lock_guard<std::mutex> lock(runtime->queue_mutex);
+    return runtime->last_trace_events.size();
+}
+
+extern "C" NVFP4_API nvfp4_status nvfp4_runtime_trace_read(
+    const nvfp4_runtime * runtime,
+    size_t index,
+    nvfp4_trace_event * out_event) {
+    if (!runtime || !out_event) {
+        return fail_invalid("runtime and trace output are required");
+    }
+    std::lock_guard<std::mutex> lock(runtime->queue_mutex);
+    if (index >= runtime->last_trace_events.size()) {
+        return fail_invalid("trace event index is out of range");
+    }
+    *out_event = runtime->last_trace_events[index];
+    g_last_error.clear();
+    return NVFP4_STATUS_OK;
 }
 
 extern "C" NVFP4_API nvfp4_status nvfp4_cpu_gemv_f32(
@@ -1289,8 +1416,7 @@ extern "C" NVFP4_API nvfp4_status nvfp4_buffer_copy_enqueue(
                                      source_offset, destination_offset, bytes,
                                      0, nullptr, &event.value),
                  "clEnqueueCopyBuffer(device_buffer)");
-        source->runtime->pending_profile_events.push_back(event.value);
-        event.value = nullptr;
+        retain_profile_event(source->runtime, event, "buffer_copy");
         g_last_error.clear();
         return NVFP4_STATUS_OK;
     } catch (const opencl_error & error) {
@@ -1531,8 +1657,7 @@ extern "C" NVFP4_API nvfp4_status nvfp4_moe_bank_decode_device_enqueue_f32(
             check_cl(clEnqueueNDRangeKernel(bank->runtime->queue, kernel,
                                             dimensions, nullptr, global, local,
                                             0, nullptr, &event.value), operation);
-            bank->runtime->pending_profile_events.push_back(event.value);
-            event.value = nullptr;
+            retain_profile_event(bank->runtime, event, operation);
         };
         cl_uint arg = 0;
         cl_uint experts = static_cast<cl_uint>(bank->experts);
@@ -1861,8 +1986,7 @@ extern "C" NVFP4_API nvfp4_status nvfp4_linear_device_enqueue_f32(
         event_owner kernel_event;
         enqueue_nvfp4_linear(runtime, matrix, x->data, vectors, dst->data,
                              kernel_kind, &kernel_event.value);
-        runtime->pending_profile_events.push_back(kernel_event.value);
-        kernel_event.value = nullptr;
+        retain_profile_event(runtime, kernel_event, "nvfp4_linear");
         g_last_error.clear();
         return NVFP4_STATUS_OK;
     } catch (const opencl_error & error) {
@@ -2105,8 +2229,7 @@ extern "C" NVFP4_API nvfp4_status fp8_linear_device_enqueue_f32(
         event_owner kernel_event;
         enqueue_fp8_linear(runtime, matrix, x->data, vectors, dst->data,
                            kernel_kind, &kernel_event.value);
-        runtime->pending_profile_events.push_back(kernel_event.value);
-        kernel_event.value = nullptr;
+        retain_profile_event(runtime, kernel_event, "fp8_linear");
         g_last_error.clear();
         return NVFP4_STATUS_OK;
     } catch (const opencl_error & error) {
@@ -2146,8 +2269,7 @@ extern "C" NVFP4_API nvfp4_status nvfp4_add_device_enqueue_f32(
         check_cl(clEnqueueNDRangeKernel(runtime->queue, runtime->add, 1, nullptr,
                                         &global, &local, 0, nullptr, &event.value),
                  "clEnqueueNDRangeKernel(add)");
-        runtime->pending_profile_events.push_back(event.value);
-        event.value = nullptr;
+        retain_profile_event(runtime, event, "add");
         g_last_error.clear();
         return NVFP4_STATUS_OK;
     } catch (const opencl_error & error) {
@@ -2198,8 +2320,7 @@ extern "C" NVFP4_API nvfp4_status nvfp4_weighted_accumulate_device_enqueue_f32(
                                         1, nullptr, &global, &local, 0, nullptr,
                                         &event.value),
                  "clEnqueueNDRangeKernel(weighted_accumulate)");
-        runtime->pending_profile_events.push_back(event.value);
-        event.value = nullptr;
+        retain_profile_event(runtime, event, "weighted_accumulate");
         g_last_error.clear();
         return NVFP4_STATUS_OK;
     } catch (const opencl_error & error) {
@@ -2240,8 +2361,7 @@ extern "C" NVFP4_API nvfp4_status nvfp4_silu_mul_device_enqueue_f32(
         check_cl(clEnqueueNDRangeKernel(runtime->queue, runtime->silu_mul, 1, nullptr,
                                         &global, &local, 0, nullptr, &event.value),
                  "clEnqueueNDRangeKernel(silu_mul)");
-        runtime->pending_profile_events.push_back(event.value);
-        event.value = nullptr;
+        retain_profile_event(runtime, event, "silu_mul");
         g_last_error.clear();
         return NVFP4_STATUS_OK;
     } catch (const opencl_error & error) {
@@ -2292,8 +2412,7 @@ extern "C" NVFP4_API nvfp4_status nvfp4_rmsnorm_device_enqueue_f32(
         check_cl(clEnqueueNDRangeKernel(runtime->queue, runtime->rmsnorm, 1, nullptr,
                                         &global, &local, 0, nullptr, &event.value),
                  "clEnqueueNDRangeKernel(rmsnorm)");
-        runtime->pending_profile_events.push_back(event.value);
-        event.value = nullptr;
+        retain_profile_event(runtime, event, "rmsnorm");
         g_last_error.clear();
         return NVFP4_STATUS_OK;
     } catch (const opencl_error & error) {
@@ -2344,8 +2463,7 @@ extern "C" NVFP4_API nvfp4_status nvfp4_f32_gemv_device_enqueue(
                                         1, nullptr, &global, &local, 0, nullptr,
                                         &event.value),
                  "clEnqueueNDRangeKernel(f32_gemv)");
-        runtime->pending_profile_events.push_back(event.value);
-        event.value = nullptr;
+        retain_profile_event(runtime, event, "f32_gemv");
         g_last_error.clear();
         return NVFP4_STATUS_OK;
     } catch (const opencl_error & error) {
@@ -2396,8 +2514,7 @@ extern "C" NVFP4_API nvfp4_status nvfp4_bf16_gemv_device_enqueue(
                                         1, nullptr, &global, &local, 0, nullptr,
                                         &event.value),
                  "clEnqueueNDRangeKernel(bf16_gemv)");
-        runtime->pending_profile_events.push_back(event.value);
-        event.value = nullptr;
+        retain_profile_event(runtime, event, "bf16_gemv");
         g_last_error.clear();
         return NVFP4_STATUS_OK;
     } catch (const opencl_error & error) {
@@ -2488,8 +2605,7 @@ qwen35_prepare_gated_delta_decode_configured_enqueue_f32(
                                         1, nullptr, &global, &local, 0, nullptr,
                                         &event.value),
                  "clEnqueueNDRangeKernel(prepare_gated_delta)");
-        runtime->pending_profile_events.push_back(event.value);
-        event.value = nullptr;
+        retain_profile_event(runtime, event, "prepare_gated_delta");
         g_last_error.clear();
         return NVFP4_STATUS_OK;
     } catch (const opencl_error & error) {
@@ -2546,8 +2662,7 @@ nvfp4_rmsnorm_silu_gate_device_enqueue_f32(
                                         1, nullptr, &global, &local, 0, nullptr,
                                         &event.value),
                  "clEnqueueNDRangeKernel(gated_rmsnorm)");
-        runtime->pending_profile_events.push_back(event.value);
-        event.value = nullptr;
+        retain_profile_event(runtime, event, "gated_rmsnorm");
         g_last_error.clear();
         return NVFP4_STATUS_OK;
     } catch (const opencl_error & error) {
@@ -2758,10 +2873,8 @@ qwen35_full_attention_decode_device_enqueue_f32(
                                         1, nullptr, &global, &local, 0, nullptr,
                                         &attention_event.value),
                  "clEnqueueNDRangeKernel(full_attention_decode)");
-        runtime->pending_profile_events.push_back(prepare_event.value);
-        prepare_event.value = nullptr;
-        runtime->pending_profile_events.push_back(attention_event.value);
-        attention_event.value = nullptr;
+        retain_profile_event(runtime, prepare_event, "full_attention_prepare");
+        retain_profile_event(runtime, attention_event, "full_attention_decode");
         state->tokens += 1;
         g_last_error.clear();
         return NVFP4_STATUS_OK;
@@ -3072,10 +3185,8 @@ qwen35_paged_full_attention_decode_device_enqueue_f32(
                      1, nullptr, &global, &local, 0, nullptr,
                      &attention_event.value),
                  "clEnqueueNDRangeKernel(paged_attention_decode)");
-        runtime->pending_profile_events.push_back(prepare_event.value);
-        prepare_event.value = nullptr;
-        runtime->pending_profile_events.push_back(attention_event.value);
-        attention_event.value = nullptr;
+        retain_profile_event(runtime, prepare_event, "paged_attention_prepare");
+        retain_profile_event(runtime, attention_event, "paged_attention_decode");
         state->tokens += 1;
         g_last_error.clear();
         return NVFP4_STATUS_OK;
@@ -3345,8 +3456,7 @@ extern "C" NVFP4_API nvfp4_status qwen35_gated_delta_device_enqueue_f32(
                                         2, nullptr, global, local, 0, nullptr,
                                         &event.value),
                  "clEnqueueNDRangeKernel(device_gated_delta)");
-        runtime->pending_profile_events.push_back(event.value);
-        event.value = nullptr;
+        retain_profile_event(runtime, event, "gated_delta");
         g_last_error.clear();
         return NVFP4_STATUS_OK;
     } catch (const opencl_error & error) {
@@ -3548,8 +3658,7 @@ extern "C" NVFP4_API nvfp4_status qwen35_causal_conv_silu_device_enqueue_f32(
                                         1, nullptr, &global, &local, 0, nullptr,
                                         &event.value),
                  "clEnqueueNDRangeKernel(device_causal_conv)");
-        runtime->pending_profile_events.push_back(event.value);
-        event.value = nullptr;
+        retain_profile_event(runtime, event, "causal_conv");
         g_last_error.clear();
         return NVFP4_STATUS_OK;
     } catch (const opencl_error & error) {

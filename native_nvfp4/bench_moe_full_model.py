@@ -34,6 +34,7 @@ from bench_resident_full_attention import rope
 from inventory_checkpoint_memory import DTYPE_BYTES, tensor_category
 from probe_moe_lm_head import load_head
 from safetensors import safe_open
+from trace_utils import summarize_trace, summarize_trace_samples
 
 ROOT = Path(__file__).resolve().parents[1]
 LAYERS = 40
@@ -152,6 +153,7 @@ class OrnithModelRegistry:
         self.head: ResidentNvFp4LmHead | None = None
         self.pool: Any | None = None
         self._buffers: list[Any] = []
+        self.last_trace: dict[str, Any] | None = None
         self._closed = False
 
         norm, packed, scales, divisor = load_head(model)
@@ -361,16 +363,32 @@ class OrnithModelRegistry:
         self.reset()
         self.runtime.synchronize()
 
-    def enqueue_layer(self, layer: int, source: Any, destination: Any) -> Any:
+    def enqueue_layer(
+        self,
+        layer: int,
+        source: Any,
+        destination: Any,
+        *,
+        trace: bool = False,
+    ) -> Any:
         slot = self.layers[layer]
         if slot.bank is None:
             raise RuntimeError(f"layer {layer} bank is not loaded")
+        if trace:
+            attention_kind = (
+                "full_attention" if slot.full_attention else "linear_attention"
+            )
+            self.runtime.set_trace_scope(
+                f"moe.layer.{layer:02d}.{attention_kind}"
+            )
         if slot.full_attention:
             slot.attention.enqueue(
                 source, self.cos, self.sin, self.attention_residual
             )
         else:
             slot.attention.enqueue(source, self.attention_residual)
+        if trace:
+            self.runtime.set_trace_scope(f"moe.layer.{layer:02d}.experts")
         self.runtime.rmsnorm_device(
             self.attention_residual,
             slot.post_norm,
@@ -394,6 +412,7 @@ class OrnithModelRegistry:
         *,
         sync_each_layer: bool,
         project_logits: bool = True,
+        trace: bool = False,
     ) -> tuple[np.ndarray | None, float, float]:
         if len(self.layers) != LAYERS or any(
             slot.bank is None for slot in self.layers
@@ -403,24 +422,39 @@ class OrnithModelRegistry:
             raise RuntimeError("LM head is unavailable")
         if position < 0 or position >= self.max_tokens:
             raise ValueError("position is outside the resident context capacity")
+        if trace and sync_each_layer:
+            raise ValueError("trace collection requires the queued execution path")
         cos, sin = rope(position)
         self.cos.upload(cos)
         self.sin.upload(sin)
         self.input.upload(hidden)
         # Finish embedding/rope uploads outside the measured device token step.
         self.runtime.synchronize()
+        self.last_trace = None
+        if trace:
+            self.runtime.set_trace_enabled(True)
         started = time.perf_counter_ns()
-        current = self.input
-        kernel_ns = 0
-        for layer in range(LAYERS):
-            destination = self.scratch0 if layer % 2 == 0 else self.scratch1
-            current = self.enqueue_layer(layer, current, destination)
-            if sync_each_layer:
-                kernel_ns += self.runtime.synchronize().kernel_ns
-        if project_logits:
-            self.head.enqueue(current)
-        profile = self.runtime.synchronize()
-        kernel_ns += profile.kernel_ns
+        try:
+            current = self.input
+            kernel_ns = 0
+            for layer in range(LAYERS):
+                destination = self.scratch0 if layer % 2 == 0 else self.scratch1
+                current = self.enqueue_layer(
+                    layer, current, destination, trace=trace
+                )
+                if sync_each_layer:
+                    kernel_ns += self.runtime.synchronize().kernel_ns
+            if project_logits:
+                if trace:
+                    self.runtime.set_trace_scope("moe.head")
+                self.head.enqueue(current)
+            profile = self.runtime.synchronize()
+            kernel_ns += profile.kernel_ns
+            if trace:
+                self.last_trace = summarize_trace(self.runtime.trace_events())
+        finally:
+            if trace:
+                self.runtime.set_trace_enabled(False)
         logits = (
             self.head.logits.download((1, self.head.vocab_size))
             if project_logits
@@ -434,10 +468,11 @@ class OrnithModelRegistry:
         hidden: np.ndarray,
         *,
         sync_each_layer: bool,
+        trace: bool = False,
     ) -> tuple[np.ndarray, float, float]:
         self.begin_sequence()
         logits, kernel_ms, wall_ms = self.step(
-            hidden, 0, sync_each_layer=sync_each_layer
+            hidden, 0, sync_each_layer=sync_each_layer, trace=trace
         )
         assert logits is not None
         return logits, kernel_ms, wall_ms
@@ -473,6 +508,8 @@ def main() -> int:
     parser.add_argument("--warmups", type=int, default=1)
     parser.add_argument("--samples", type=int, default=5)
     parser.add_argument("--generate-tokens", type=int, default=0)
+    parser.add_argument("--trace-token", action="store_true")
+    parser.add_argument("--trace-samples", type=int, default=3)
     parser.add_argument("--prompt")
     parser.add_argument("--results", type=Path, default=RESULTS)
     args = parser.parse_args()
@@ -487,6 +524,7 @@ def main() -> int:
         or args.samples <= 0
         or args.generate_tokens < 0
         or args.generate_tokens > args.max_tokens
+        or args.trace_samples <= 0
     ):
         parser.error("invalid gates, context, warmups, or sample count")
 
@@ -621,6 +659,34 @@ def main() -> int:
                 ),
                 "finite_logits": bool(np.isfinite(queued_logits).all()),
             }
+            if args.trace_token:
+                trace_samples = []
+                for _ in range(args.trace_samples):
+                    traced_logits, traced_kernel, traced_wall = registry.execute(
+                        hidden, sync_each_layer=False, trace=True
+                    )
+                    if not np.array_equal(queued_logits, traced_logits):
+                        raise RuntimeError("MoE trace replay changed full logits")
+                    if registry.last_trace is None:
+                        raise RuntimeError("MoE trace replay produced no events")
+                    registry.last_trace.update(
+                        replay_reported_kernel_ms=traced_kernel,
+                        replay_wall_ms=traced_wall,
+                        maximum_absolute_error_vs_untraced_logits=float(
+                            np.max(np.abs(queued_logits - traced_logits))
+                        ),
+                    )
+                    trace_samples.append(registry.last_trace)
+                full_result["trace"] = summarize_trace_samples(trace_samples)
+                trace_kernel_median = full_result["trace"]["sampling"][
+                    "kernel_sum_ms"
+                ]["median"]
+                print(
+                    "moe_trace "
+                    f"events={full_result['trace']['event_count']} "
+                    f"kernel_median_ms={trace_kernel_median:.6f}",
+                    flush=True,
+                )
             print(
                 f"full_token input={args.token_id} output={queued_token} "
                 f"kernel_ms={kernel['median']:.6f} "
@@ -899,10 +965,24 @@ def main() -> int:
                 "explicit_completion_marker": True,
             },
             "limitations": [
-                "one request and one decoded token; sustained generation is not measured",
+                *(
+                    [
+                        "one request and one decoded token; sustained "
+                        "generation is not measured"
+                    ]
+                    if generation_result is None
+                    else [
+                        "one request; multi-request scheduling and sustained "
+                        "thermal behavior are not measured"
+                    ]
+                ),
+                "prefill is sequential batch-one execution rather than "
+                "shared-weight GEMM",
                 "greedy argmax is performed after downloading full logits",
-                "available physical memory is system-wide, not an OpenCL allocator counter",
-                "vision and MTP tensors are intentionally excluded from the coding endpoint",
+                "available physical memory is system-wide, not an OpenCL "
+                "allocator counter",
+                "vision and MTP tensors are intentionally excluded from the "
+                "coding endpoint",
             ],
         }
         args.results.mkdir(parents=True, exist_ok=True)
@@ -910,9 +990,13 @@ def main() -> int:
             "full-model-generation"
             if generation_result is not None
             else (
-                "full-model-token"
-                if full_result is not None
-                else "full-model-residency"
+                "full-model-trace"
+                if args.trace_token and full_result is not None
+                else (
+                    "full-model-token"
+                    if full_result is not None
+                    else "full-model-residency"
+                )
             )
         )
         path = args.results / (

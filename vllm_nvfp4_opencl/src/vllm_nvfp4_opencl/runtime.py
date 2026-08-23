@@ -6,6 +6,7 @@ import ctypes as C
 import os
 import platform
 import threading
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -17,6 +18,35 @@ class Profile(C.Structure):
         ("kernel_ns", C.c_uint64),
         ("download_ns", C.c_uint64),
     ]
+
+
+class _NativeTraceEvent(C.Structure):
+    _fields_ = [
+        ("scope", C.c_char * 96),
+        ("operation", C.c_char * 64),
+        ("queued_ns", C.c_uint64),
+        ("submit_ns", C.c_uint64),
+        ("start_ns", C.c_uint64),
+        ("end_ns", C.c_uint64),
+    ]
+
+
+@dataclass(frozen=True)
+class TraceEvent:
+    scope: str
+    operation: str
+    queued_ns: int
+    submit_ns: int
+    start_ns: int
+    end_ns: int
+
+    @property
+    def duration_ns(self) -> int:
+        return self.end_ns - self.start_ns
+
+    @property
+    def queue_delay_ns(self) -> int:
+        return self.start_ns - self.queued_ns
 
 
 def _workspace_root() -> Path:
@@ -371,6 +401,24 @@ class Runtime:
         self.lib.nvfp4_runtime_last_profile.restype = C.c_int
         self.lib.nvfp4_runtime_synchronize.argtypes = [C.c_void_p]
         self.lib.nvfp4_runtime_synchronize.restype = C.c_int
+        self.lib.nvfp4_runtime_trace_set_enabled.argtypes = [
+            C.c_void_p,
+            C.c_int,
+        ]
+        self.lib.nvfp4_runtime_trace_set_enabled.restype = C.c_int
+        self.lib.nvfp4_runtime_trace_set_scope.argtypes = [
+            C.c_void_p,
+            C.c_char_p,
+        ]
+        self.lib.nvfp4_runtime_trace_set_scope.restype = C.c_int
+        self.lib.nvfp4_runtime_trace_count.argtypes = [C.c_void_p]
+        self.lib.nvfp4_runtime_trace_count.restype = C.c_size_t
+        self.lib.nvfp4_runtime_trace_read.argtypes = [
+            C.c_void_p,
+            C.c_size_t,
+            C.POINTER(_NativeTraceEvent),
+        ]
+        self.lib.nvfp4_runtime_trace_read.restype = C.c_int
         self.lib.nvfp4_cpu_gemv_f32.argtypes = [
             C.c_void_p,
             C.c_void_p,
@@ -772,6 +820,48 @@ class Runtime:
             "runtime_synchronize",
         )
         return self.last_profile()
+
+    def set_trace_enabled(self, enabled: bool) -> None:
+        self._check(
+            self.lib.nvfp4_runtime_trace_set_enabled(
+                self.handle, int(enabled)
+            ),
+            "runtime_trace_set_enabled",
+        )
+
+    def set_trace_scope(self, scope: str) -> None:
+        encoded = scope.encode("utf-8")
+        if len(encoded) >= 96:
+            raise ValueError("trace scope must be shorter than 96 UTF-8 bytes")
+        self._check(
+            self.lib.nvfp4_runtime_trace_set_scope(self.handle, encoded),
+            "runtime_trace_set_scope",
+        )
+
+    def trace_events(self) -> list[TraceEvent]:
+        count = int(self.lib.nvfp4_runtime_trace_count(self.handle))
+        events = []
+        for index in range(count):
+            native = _NativeTraceEvent()
+            self._check(
+                self.lib.nvfp4_runtime_trace_read(
+                    self.handle, index, C.byref(native)
+                ),
+                "runtime_trace_read",
+            )
+            events.append(
+                TraceEvent(
+                    scope=bytes(native.scope).split(b"\0", 1)[0].decode(),
+                    operation=bytes(native.operation)
+                    .split(b"\0", 1)[0]
+                    .decode(),
+                    queued_ns=int(native.queued_ns),
+                    submit_ns=int(native.submit_ns),
+                    start_ns=int(native.start_ns),
+                    end_ns=int(native.end_ns),
+                )
+            )
+        return events
 
     def create_buffer(self, bytes_: int) -> DeviceBuffer:
         if bytes_ <= 0:

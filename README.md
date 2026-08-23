@@ -22,9 +22,9 @@ Current highlights on an Adreno X2-90:
   host routing boundary; one complete layer bank occupies 454.8 MB.
 - Real cumulative residency passes at 1.36/2.27/4.55/8.64 GB across 3/5/10/19
   expert banks; all layers pass and closing recovers 8.54 GB immediately.
-- Metadata-exact memory plans cover every tensor in both checkpoints. The first
-  coding-service policy omits vision/MTP, keeps embedding lookup lazy on CPU,
-  and retains a 2 GiB OpenCL safety reserve.
+- Metadata-exact memory plans cover every tensor in both checkpoints. The
+  current text-first policy defers vision/MTP to later gated coding phases,
+  keeps embedding lookup lazy on CPU, and retains a 2 GiB OpenCL safety reserve.
 - Opt-in BF16 paged KV halves cache storage for the dense model with unchanged
   four-layer cadence and `5.64e-5` relative RMSE versus FP32 at batch four.
 - The 35B path now has an exact complete full-attention + MoE decoder layer:
@@ -50,6 +50,10 @@ Current highlights on an Adreno X2-90:
 - Its tokenizer-backed retained-state loop sustains **1.908 end-to-end tok/s**
   over 31 measured decode steps; 27-token sequential prefill runs at 2.003
   tok/s, and a layer-synchronized replay produces identical logits and tokens.
+- Barrier-free full-token traces now attribute 1,042 dense and 772 MoE OpenCL
+  events. Dense quantized linears consume **95.3%** of kernel time; same-shape
+  NVFP4 and FP8 MLP layers both take about 5.13 ms, isolating NVFP4 decode
+  efficiency as the primary dense target.
 - Independent CPU/GPU tensor oracles and isolated-process accelerator gates.
 
 Start with [CAMPAIGN_BANDWIDTH_FIRST.md](CAMPAIGN_BANDWIDTH_FIRST.md) and

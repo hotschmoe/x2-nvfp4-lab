@@ -52,6 +52,20 @@ typedef struct nvfp4_profile {
 } nvfp4_profile;
 
 enum {
+    NVFP4_TRACE_SCOPE_CAPACITY = 96,
+    NVFP4_TRACE_OPERATION_CAPACITY = 64,
+};
+
+typedef struct nvfp4_trace_event {
+    char scope[NVFP4_TRACE_SCOPE_CAPACITY];
+    char operation[NVFP4_TRACE_OPERATION_CAPACITY];
+    uint64_t queued_ns;
+    uint64_t submit_ns;
+    uint64_t start_ns;
+    uint64_t end_ns;
+} nvfp4_trace_event;
+
+enum {
     NVFP4_SVM_COARSE_GRAIN_BUFFER = 1u << 0,
     NVFP4_SVM_FINE_GRAIN_BUFFER = 1u << 1,
     NVFP4_SVM_FINE_GRAIN_SYSTEM = 1u << 2,
@@ -90,6 +104,22 @@ NVFP4_API nvfp4_status nvfp4_runtime_query_device(
     nvfp4_device_info * out_info);
 
 NVFP4_API nvfp4_status nvfp4_runtime_synchronize(nvfp4_runtime * runtime);
+
+// Tracing is opt-in. Enqueued operations retain their logical scope and
+// OpenCL command timestamps without adding queue barriers. A synchronize call
+// replaces the completed trace; read it before the next synchronize call.
+NVFP4_API nvfp4_status nvfp4_runtime_trace_set_enabled(
+    nvfp4_runtime * runtime,
+    int enabled);
+NVFP4_API nvfp4_status nvfp4_runtime_trace_set_scope(
+    nvfp4_runtime * runtime,
+    const char * scope);
+NVFP4_API size_t nvfp4_runtime_trace_count(
+    const nvfp4_runtime * runtime);
+NVFP4_API nvfp4_status nvfp4_runtime_trace_read(
+    const nvfp4_runtime * runtime,
+    size_t index,
+    nvfp4_trace_event * out_event);
 
 // Direct ARM64 CPU fallback over the checkpoint-native representation. This is
 // intended for hybrid placement when a matrix does not fit the device budget.

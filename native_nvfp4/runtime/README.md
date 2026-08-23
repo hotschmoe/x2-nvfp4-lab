@@ -25,6 +25,14 @@ wraps those allocations with `CL_MEM_USE_HOST_PTR`, and retains the same pointer
 for `nvfp4_matrix_cpu_linear_f32`. The `cl_mem` views are released before their
 SVM allocations.
 
+Opt-in tracing attaches a caller-defined logical scope to every queued graph
+operation and exposes the completed OpenCL queued/submit/start/end timestamps.
+It does not add synchronization points. `nvfp4_runtime_trace_set_enabled`,
+`nvfp4_runtime_trace_set_scope`, `nvfp4_runtime_trace_count`, and
+`nvfp4_runtime_trace_read` provide the C boundary; the Python runtime returns
+immutable `TraceEvent` records. The next synchronize replaces the completed
+trace, so consumers must read it before submitting another measured graph.
+
 Build on this Windows ARM64 machine:
 
 ```powershell

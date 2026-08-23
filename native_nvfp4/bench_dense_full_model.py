@@ -22,6 +22,7 @@ from bench_islands import memory_status, percentile, power_status, system_model
 from bench_resident_full_attention import rope
 from inventory_checkpoint_memory import DTYPE_BYTES, tensor_category
 from safetensors import safe_open
+from trace_utils import summarize_trace, summarize_trace_samples
 
 ROOT = Path(__file__).resolve().parents[1]
 MODEL = ROOT / "models/Qwen3.8-27B-NVFP4-Unsloth"
@@ -142,6 +143,7 @@ class DenseModelRegistry:
         self.head: ResidentFp8LmHead | None = None
         self.pool: Any | None = None
         self._buffers: list[Any] = []
+        self.last_trace: dict[str, Any] | None = None
         self._closed = False
         try:
             with safe_open(
@@ -344,14 +346,33 @@ class DenseModelRegistry:
         self.reset()
         self.runtime.synchronize()
 
-    def enqueue_layer(self, layer: int, source: Any, destination: Any) -> Any:
+    def enqueue_layer(
+        self,
+        layer: int,
+        source: Any,
+        destination: Any,
+        *,
+        trace: bool = False,
+    ) -> Any:
         slot = self.layers[layer]
+        if trace:
+            attention_kind = (
+                "full_attention" if slot.full_attention else "linear_attention"
+            )
+            self.runtime.set_trace_scope(
+                f"dense.layer.{layer:02d}.{attention_kind}"
+            )
         if slot.full_attention:
             slot.attention.enqueue(
                 source, self.cos, self.sin, self.attention_residual
             )
         else:
             slot.attention.enqueue(source, self.attention_residual)
+        if trace:
+            mlp_kind = "mlp_fp8" if layer >= 56 else "mlp_nvfp4"
+            self.runtime.set_trace_scope(
+                f"dense.layer.{layer:02d}.{mlp_kind}"
+            )
         return slot.mlp.enqueue(self.attention_residual, destination)
 
     def validate_last_layer(self, hidden: np.ndarray) -> float:
@@ -389,28 +410,44 @@ class DenseModelRegistry:
         *,
         sync_each_layer: bool,
         project_logits: bool = True,
+        trace: bool = False,
     ) -> tuple[np.ndarray | None, float, float]:
         if len(self.layers) != LAYERS or self.head is None:
             raise RuntimeError("complete dense execution requires all 64 layers")
         if position < 0 or position >= self.max_tokens:
             raise ValueError("position is outside the dense context capacity")
+        if trace and sync_each_layer:
+            raise ValueError("trace collection requires the queued execution path")
         cos, sin = rope(position)
         self.cos.upload(cos)
         self.sin.upload(sin)
         self.input.upload(hidden)
         self.runtime.synchronize()
+        self.last_trace = None
+        if trace:
+            self.runtime.set_trace_enabled(True)
         started = time.perf_counter_ns()
-        current = self.input
-        kernel_ns = 0
-        for layer in range(LAYERS):
-            destination = self.scratch0 if layer % 2 == 0 else self.scratch1
-            current = self.enqueue_layer(layer, current, destination)
-            if sync_each_layer:
-                kernel_ns += self.runtime.synchronize().kernel_ns
-        if project_logits:
-            self.head.enqueue(current)
-        profile = self.runtime.synchronize()
-        kernel_ns += profile.kernel_ns
+        try:
+            current = self.input
+            kernel_ns = 0
+            for layer in range(LAYERS):
+                destination = self.scratch0 if layer % 2 == 0 else self.scratch1
+                current = self.enqueue_layer(
+                    layer, current, destination, trace=trace
+                )
+                if sync_each_layer:
+                    kernel_ns += self.runtime.synchronize().kernel_ns
+            if project_logits:
+                if trace:
+                    self.runtime.set_trace_scope("dense.head")
+                self.head.enqueue(current)
+            profile = self.runtime.synchronize()
+            kernel_ns += profile.kernel_ns
+            if trace:
+                self.last_trace = summarize_trace(self.runtime.trace_events())
+        finally:
+            if trace:
+                self.runtime.set_trace_enabled(False)
         logits = (
             self.head.logits.download((1, self.head.vocab_size))
             if project_logits
@@ -427,10 +464,11 @@ class DenseModelRegistry:
         hidden: np.ndarray,
         *,
         sync_each_layer: bool,
+        trace: bool = False,
     ) -> tuple[np.ndarray, float, float]:
         self.begin_sequence()
         logits, kernel_ms, wall_ms = self.step(
-            hidden, 0, sync_each_layer=sync_each_layer
+            hidden, 0, sync_each_layer=sync_each_layer, trace=trace
         )
         assert logits is not None
         return logits, kernel_ms, wall_ms
@@ -466,6 +504,8 @@ def main() -> int:
     parser.add_argument("--warmups", type=int, default=1)
     parser.add_argument("--samples", type=int, default=5)
     parser.add_argument("--generate-tokens", type=int, default=0)
+    parser.add_argument("--trace-token", action="store_true")
+    parser.add_argument("--trace-samples", type=int, default=3)
     parser.add_argument("--prompt")
     parser.add_argument("--results", type=Path, default=RESULTS)
     args = parser.parse_args()
@@ -480,6 +520,7 @@ def main() -> int:
         or args.samples <= 0
         or args.generate_tokens < 0
         or args.generate_tokens > args.max_tokens
+        or args.trace_samples <= 0
     ):
         parser.error("invalid gates, context, warmups, or samples")
 
@@ -593,6 +634,34 @@ def main() -> int:
                 ),
                 "finite_logits": bool(np.isfinite(queued_logits).all()),
             }
+            if args.trace_token:
+                trace_samples = []
+                for _ in range(args.trace_samples):
+                    traced_logits, traced_kernel, traced_wall = registry.execute(
+                        hidden, sync_each_layer=False, trace=True
+                    )
+                    if not np.array_equal(queued_logits, traced_logits):
+                        raise RuntimeError("dense trace replay changed full logits")
+                    if registry.last_trace is None:
+                        raise RuntimeError("dense trace replay produced no events")
+                    registry.last_trace.update(
+                        replay_reported_kernel_ms=traced_kernel,
+                        replay_wall_ms=traced_wall,
+                        maximum_absolute_error_vs_untraced_logits=float(
+                            np.max(np.abs(queued_logits - traced_logits))
+                        ),
+                    )
+                    trace_samples.append(registry.last_trace)
+                full_result["trace"] = summarize_trace_samples(trace_samples)
+                trace_kernel_median = full_result["trace"]["sampling"][
+                    "kernel_sum_ms"
+                ]["median"]
+                print(
+                    "dense_trace "
+                    f"events={full_result['trace']['event_count']} "
+                    f"kernel_median_ms={trace_kernel_median:.6f}",
+                    flush=True,
+                )
             print(
                 f"dense_full_token input={args.token_id} output={queued_token} "
                 f"kernel_ms={kernel['median']:.6f} "
@@ -853,7 +922,11 @@ def main() -> int:
         suffix = (
             "generation"
             if generation_result is not None
-            else ("token" if full_result is not None else "residency")
+            else (
+                "trace"
+                if args.trace_token and full_result is not None
+                else ("token" if full_result is not None else "residency")
+            )
         )
         path = args.results / (
             f"{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S-%f')}-"

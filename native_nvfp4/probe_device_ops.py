@@ -79,6 +79,29 @@ def main() -> int:
             "rmsnorm", norm_reference, output_buffer.download(shape)
         )
 
+        runtime.set_trace_enabled(True)
+        runtime.set_trace_scope("probe.device_ops")
+        runtime.add_device(x_buffer, other_buffer, x.size, output_buffer)
+        runtime.silu_mul_device(x_buffer, other_buffer, x.size, output_buffer)
+        runtime.rmsnorm_device(
+            x_buffer,
+            weight_buffer,
+            args.rows,
+            args.cols,
+            epsilon,
+            output_buffer,
+        )
+        trace_profile = runtime.synchronize()
+        trace_events = runtime.trace_events()
+        runtime.set_trace_enabled(False)
+        trace_operations = [event.operation for event in trace_events]
+        if trace_operations != ["add", "silu_mul", "rmsnorm"]:
+            raise RuntimeError(f"unexpected trace events: {trace_operations}")
+        if trace_profile.kernel_ns != sum(
+            event.duration_ns for event in trace_events
+        ):
+            raise RuntimeError("trace duration sum differs from runtime profile")
+
         started = time.perf_counter()
         for _ in range(args.iterations):
             runtime.rmsnorm_device(
@@ -111,6 +134,11 @@ def main() -> int:
             f"queued_rmsnorm_kernel_us="
             f"{queued_profile.kernel_ns / args.iterations / 1e3:.3f} "
             f"queued_rmsnorm_wall_us={elapsed * 1e6:.3f}"
+        )
+        print(
+            f"trace_events={len(trace_events)} "
+            f"trace_kernel_us={trace_profile.kernel_ns / 1e3:.3f} "
+            f"trace_scope={trace_events[0].scope}"
         )
         print("PASS: queued device graph primitives match NumPy references")
     finally:

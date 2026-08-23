@@ -337,10 +337,19 @@ decode kernel (28.9% of the calibrated 129 GB/s GPU raw-read ceiling, 16.3% of
 the nominal 228 GB/s SoC rate). MoE activates only about 2.265 GB of its 19.808
 GB resident payload per token; it reaches about 29.02 GB/s (22.5% calibrated,
 12.7% nominal). These are logical checkpoint-byte rates, not memory-controller
-counters. The current runtime sums OpenCL event durations but does not retain
-kernel labels, and the client-facing tokenizer/scheduler/upload/download/SSE
-path is not yet one unified trace. `BENCHMARKS.md` records the covered and open
-stages.
+counters.
+
+The runtime now retains scope and OpenCL command timestamps for an opt-in trace
+without inserting queue barriers. Three-sample exact-replay captures contain
+1,042 dense events and 772 MoE events. Dense quantized linears consume 95.3% of
+kernel time; its 56 NVFP4 MLPs average 5.133 ms/layer while the eight same-shape
+FP8 MLPs average 5.129 ms/layer despite NVFP4 moving roughly 44% fewer bytes.
+NVFP4 decode efficiency is therefore the primary dense bottleneck. On MoE,
+experts are 42.4%, linear attention 36.7%, the head 12.8%, and full attention
+7.9%; expert down reaches only 18.52 GB/s, and top-8 alone costs 4.137 ms/token.
+Inter-kernel gaps are only 2.204 ms dense and 0.915 ms MoE. The remaining trace
+gap is the client-facing tokenizer/scheduler/upload/download/detokenizer/SSE
+path plus hardware memory/cache/occupancy counters.
 
 ## First decoder benchmarks
 

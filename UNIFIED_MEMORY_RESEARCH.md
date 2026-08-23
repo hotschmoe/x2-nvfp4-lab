@@ -10,8 +10,8 @@ The runtime now has measured, budget-qualified complete tokens and retained
 state generation for both Ornith 35B MoE and dense 27B. The next milestone is
 to turn those proven executor loops into profiled client-facing serving:
 
-1. add labeled timing spans from HTTP intake through tokenizer, scheduler,
-   embedding upload, decoder subgraphs, logits/sampling, detokenization, and
+1. extend the completed native decoder-event trace through HTTP intake,
+   tokenizer, scheduler, embedding upload, logits/sampling, detokenization, and
    streamed response;
 2. replace sequential prefill with shared-weight GEMM and add top-k/top-p
    sampling without downloading the entire vocabulary when the policy permits;
@@ -558,14 +558,16 @@ Prioritized next questions, including work not yet performed:
    decode tok/s. Replace sequential prefill with shared-weight GEMM batching,
    add the official top-k 20/top-p 0.95 sampler, and expose request cancellation
    and streaming through the worker boundary.
-2. **Unified serving trace.** Dense retained-state generation now passes at
-   1.908 end-to-end tok/s with exact replay. Add labeled spans for tokenizer,
-   queueing, embedding gather/upload, each decoder component, logits transfer,
-   sampling, detokenization, and SSE; separately profile the dense model's 56
-   NVFP4 versus eight FP8 MLP layers.
-3. **Further MoE fusion.** Device-resident 256-way top-8 and contiguous-bank
-   dispatch now pass. Next compare fused gate/up, SiLU/down, shared-slot, and
-   weighted-reduction variants, and expose per-kernel component timing.
+2. **Complete the serving trace.** Barrier-free native traces now label all
+   1,042 dense and 772 MoE device events and separate the dense 56 NVFP4 versus
+   eight FP8 MLP layers. Extend the same trace ID through tokenizer, request
+   queueing, embedding gather/upload, logits transfer, sampling, detokenization,
+   and SSE, then add hardware memory/cache/occupancy counters.
+3. **NVFP4 decode and MoE fusion.** Same-shape dense NVFP4 and FP8 MLPs both
+   take about 5.13 ms/layer, proving the compressed path is instruction limited.
+   Tune packed/scale loads and output tiling, especially the 18.52 GB/s expert
+   down path; compare fused SiLU/down/shared reduction and replace the current
+   4.137 ms/token top-8 sequence with a fused router/selection design.
 4. **Atlas kernel and graph structure.** Audit its open-source Qwen3.5/GB10 MoE,
    recurrent-layer, paged-KV, CUDA-graph, and MTP paths for reusable scheduling
    patterns, while separating CUDA/SM121-only techniques from portable ones.
@@ -585,9 +587,13 @@ Prioritized next questions, including work not yet performed:
    coding traces, determine whether all 256 experts fit inside the safe OpenCL
    budget, and compare full residency, layer streaming, and frequency-aware
    caching.
-9. **MTP speculative decode.** Identify the checkpoint's exact MTP graph, build
-   an acceptance-correct device path, and measure accepted tokens per expensive
-   main-model weight stream.
+9. **Vision and MTP coding expansion.** Both are future coding requirements,
+   not permanently optional features: vision supplies screenshot/UI/document
+   context and MTP can accelerate interactive generation. Keep both outside the
+   current text-kernel baseline, then qualify the vision tower/projector and an
+   acceptance-correct MTP device graph behind independent memory, correctness,
+   and latency gates. Measure accepted MTP tokens per expensive main-model
+   weight stream before enabling it by default.
 10. **NPU registered memory.** Measure whether QAIRT/QNN can consume a registered
    view of the same underlying allocation, its dispatch floor, and contention
    with Adreno and Oryon before assigning it any production work.

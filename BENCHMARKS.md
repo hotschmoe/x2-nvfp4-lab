@@ -761,9 +761,9 @@ path is not yet traced as one labeled timeline:
 | HTTP/API, tokenization, streaming | tokenizer/template and stop-token correctness | separate HTTP, tokenizer, detokenizer, and SSE timings |
 | Admission and scheduling | paged batch-one/four scheduler microbenchmarks | live vLLM request trace and queue delay |
 | Embedding | lazy row gather and exact row-count accounting | gather and upload timings split from host wall |
-| Decoder layers | operator oracles, complete layers, four-layer cadence, full-model kernel totals | labeled per-kernel full-token trace and hardware counters |
-| KV/recurrent state | page-boundary replay and independent operator oracles | per-stage time/traffic inside the complete model |
-| LM head | isolated Ornith head and both complete model heads | isolated dense FP8 head and device-side partial-logit sampling |
+| Decoder layers | operator oracles plus labeled, barrier-free full-token command traces | hardware memory/cache/occupancy counters |
+| KV/recurrent state | labeled attention scopes, page-boundary replay, and independent operator oracles | physical traffic counters inside each scope |
+| LM head | isolated Ornith head plus labeled complete-model heads | isolated dense FP8 head and device-side partial-logit sampling |
 | Sampling/output | full-logit download plus host argmax included in wall | split download, sampler, detokenization, and stream flush |
 
 At batch one the full-token data already identifies the decoder as the primary
@@ -773,3 +773,59 @@ account for about 96.6% of the complete MoE kernel. Dense's early-layer cadence
 projects to roughly 94% of its complete kernel, although its final eight FP8
 MLPs prevent treating that projection as an exact decomposition. Sequential
 single-token prefill is separately the dominant TTFT limitation.
+
+## Barrier-free full-token command traces
+
+The runtime now retains a logical scope and OpenCL queued/submit/start/end
+timestamps for every event when tracing is enabled. Scope changes do not enqueue
+barriers; the same complete graph is submitted to the same in-order queue. Each
+canonical capture executes three exact replays, selects the trace nearest the
+median total kernel time as the raw timeline, and stores cross-sample stage and
+operation distributions. Every traced replay is bit-identical to the untraced
+logits.
+
+| Dense 27B stage | Events | Median kernel | Kernel share |
+|---|---:|---:|---:|
+| 56 NVFP4 MLPs | 336 | 287.452 ms | 55.7% |
+| 48 linear-attention layers | 528 | 128.855 ms | 25.0% |
+| Eight FP8 MLPs | 48 | 41.030 ms | 8.0% |
+| 16 full-attention layers | 128 | 33.681 ms | 6.5% |
+| FP8 final norm/head | 2 | 24.843 ms | 4.8% |
+
+The dense trace contains 1,042 events. Median summed kernel time is 515.306 ms
+(514.926-517.101 ms); median first-start to final-end device span is 518.042 ms,
+leaving only 2.204 ms between kernels. Quantized matrix kernels account for
+95.3% of total kernel time.
+
+The most important format comparison is within the same model and MLP shape.
+NVFP4 MLPs average 5.133 ms/layer while the last eight row-scaled FP8 MLPs
+average 5.129 ms/layer. NVFP4 consumes only about 150.4 MB of native checkpoint
+payload per layer versus 267.5 MB for FP8, yet currently gains no latency. Its
+8.423 GB of MLP payload is delivered at 29.62 GB/s, while the FP8 MLP tail
+delivers 2.140 GB at 52.76 GB/s. The packed E2M1 decode/instruction path, not
+LPDDR capacity, is therefore the primary dense optimization target.
+
+| MoE 35B stage | Events | Median kernel | Kernel share |
+|---|---:|---:|---:|
+| Routers and active experts | 360 | 32.457 ms | 42.4% |
+| 30 linear-attention layers | 330 | 28.093 ms | 36.7% |
+| NVFP4 final norm/head | 2 | 9.969 ms | 12.8% |
+| Ten full-attention layers | 80 | 6.065 ms | 7.9% |
+
+The MoE trace contains 772 events. Median summed kernel time is 77.079 ms
+(76.550-77.759 ms), the device span is 78.674 ms, and only 0.915 ms lies between
+kernels. Expert gate/up projections consume 14.526 ms, expert down projections
+11.464 ms, and the 256-way top-8 kernels 4.137 ms. Active gate/up payload reaches
+29.24 GB/s, but down projection reaches only 18.52 GB/s. The down kernel, NVFP4
+head, and top-8 selection are the clearest MoE-specific targets; FP8 attention
+already delivers roughly 47-48 GB/s of useful matrix bytes.
+
+Reading hundreds of trace records through ctypes occurs after queue completion
+and inflates trace-replay wall time, so throughput remains based on the untraced
+generation runs. The OpenCL kernel timestamps themselves agree exactly with the
+runtime aggregate.
+
+Canonical artifacts:
+
+- `20260823-052018-140022-dense-full-model-trace.json`
+- `20260823-052128-636267-moe-full-model-trace.json`
