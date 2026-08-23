@@ -85,6 +85,11 @@ scripts/run-isolated.ps1 -Executable $python -TimeoutSeconds 300 `
 # Real Qwen3.5 four-layer cadence: 3 linear-attention + 1 full-attention
 scripts/run-isolated.ps1 -Executable $python -TimeoutSeconds 300 `
   -CommandLine '-3 native_nvfp4/bench_qwen35_block.py --layer 0 --layer-count 4 --sequence-length 32 --prefill-iterations 3 --decode-tokens 8 --gpu-gated-delta --gpu-causal-conv'
+
+# Exact sparse layer: BF16 route, shared expert, top-8 NVFP4 experts, reduction
+scripts/run-isolated.ps1 -Executable $python -TimeoutSeconds 180 `
+  -CompletionMarker 'MOE_NVFP4_ROUTED_LAYER_PASS' `
+  -CommandLine '-3 native_nvfp4/bench_moe_routed_layer.py --warmups 5 --samples 30'
 ```
 
 The scalar GEMV/GEMM kernels assign one work-item to each output row/vector pair

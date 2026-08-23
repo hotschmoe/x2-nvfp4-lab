@@ -400,6 +400,15 @@ class Runtime:
             C.c_void_p,
         ]
         self.lib.nvfp4_add_device_enqueue_f32.restype = C.c_int
+        self.lib.nvfp4_weighted_accumulate_device_enqueue_f32.argtypes = [
+            C.c_void_p,
+            C.c_void_p,
+            C.c_float,
+            C.c_void_p,
+            C.c_int,
+            C.c_int,
+        ]
+        self.lib.nvfp4_weighted_accumulate_device_enqueue_f32.restype = C.c_int
         self.lib.nvfp4_silu_mul_device_enqueue_f32.argtypes = (
             self.lib.nvfp4_add_device_enqueue_f32.argtypes
         )
@@ -423,6 +432,10 @@ class Runtime:
             C.c_void_p,
         ]
         self.lib.nvfp4_f32_gemv_device_enqueue.restype = C.c_int
+        self.lib.nvfp4_bf16_gemv_device_enqueue.argtypes = (
+            self.lib.nvfp4_f32_gemv_device_enqueue.argtypes
+        )
+        self.lib.nvfp4_bf16_gemv_device_enqueue.restype = C.c_int
         self.lib.qwen35_prepare_gated_delta_decode_device_enqueue_f32.argtypes = [
             C.c_void_p
         ] * 11
@@ -942,6 +955,28 @@ class Runtime:
         )
         return out
 
+    def weighted_accumulate_device(
+        self,
+        source: DeviceBuffer,
+        scale: float,
+        out: DeviceBuffer,
+        elements: int,
+        *,
+        reset: bool = False,
+    ) -> DeviceBuffer:
+        self._check(
+            self.lib.nvfp4_weighted_accumulate_device_enqueue_f32(
+                self.handle,
+                source.handle,
+                scale,
+                out.handle,
+                elements,
+                int(reset),
+            ),
+            "weighted_accumulate_device_enqueue_f32",
+        )
+        return out
+
     def rmsnorm_device(
         self,
         x: DeviceBuffer,
@@ -983,6 +1018,27 @@ class Runtime:
                 out.handle,
             ),
             "f32_gemv_device_enqueue",
+        )
+        return out
+
+    def bf16_gemv_device(
+        self,
+        weights: DeviceBuffer,
+        x: DeviceBuffer,
+        rows: int,
+        cols: int,
+        out: DeviceBuffer,
+    ) -> DeviceBuffer:
+        self._check(
+            self.lib.nvfp4_bf16_gemv_device_enqueue(
+                self.handle,
+                weights.handle,
+                x.handle,
+                rows,
+                cols,
+                out.handle,
+            ),
+            "bf16_gemv_device_enqueue",
         )
         return out
 

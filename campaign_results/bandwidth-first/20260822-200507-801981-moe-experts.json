@@ -1,0 +1,90 @@
+{
+  "campaign": "bandwidth-first",
+  "schema_version": 1,
+  "timestamp": "2026-08-22T20:05:07-07:00",
+  "hardware": {
+    "system_model": "ASUS Zenbook A16 UX3607OA",
+    "gpu": "Qualcomm(R) Adreno(TM) X2-90 GPU"
+  },
+  "software": {
+    "command": [
+      "native_nvfp4/bench_moe_experts.py",
+      "--warmups",
+      "1",
+      "--samples",
+      "3"
+    ]
+  },
+  "environment": {
+    "power_source": "AC",
+    "battery_percent": 100,
+    "thermal_regime": "warm-burst"
+  },
+  "workload": {
+    "operation": "qwen35_moe_routed_experts",
+    "format": "nvfp4",
+    "layer": 0,
+    "expert_ids": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ],
+    "rows": 0,
+    "cols": 0,
+    "vectors": 1,
+    "logical_payload_bytes": 14155776
+  },
+  "timing": {
+    "warmups": 1,
+    "samples": 3,
+    "kernel_ms": {
+      "median": 0.6478,
+      "p10": 0.64764,
+      "p90": 0.651,
+      "minimum": 0.6476,
+      "maximum": 0.6518
+    },
+    "wall_ms": {
+      "median": 0.8322,
+      "p10": 0.82804,
+      "p90": 0.8366,
+      "minimum": 0.827,
+      "maximum": 0.8377
+    },
+    "per_expert_kernel_ms": 0.080975
+  },
+  "bandwidth": {
+    "logical_gbs": 21.852077801790678,
+    "matched_island_ceiling_gbs": 129.0,
+    "island_utilization": 0.16939595195186571,
+    "physical_gbs": null
+  },
+  "correctness": {
+    "passed": true,
+    "first_expert_max_abs_error": 4.656612873077393e-10,
+    "finite_outputs": true,
+    "explicit_completion_marker": true
+  },
+  "limitations": [
+    "router top-k selection is supplied by expert_ids",
+    "router weights and expert-output reduction are not included",
+    "expert kernels execute serially on one in-order queue"
+  ],
+  "samples": {
+    "kernel_ms": [
+      0.6476,
+      0.6478,
+      0.6518
+    ],
+    "wall_ms": [
+      0.827,
+      0.8377,
+      0.8322
+    ]
+  }
+}

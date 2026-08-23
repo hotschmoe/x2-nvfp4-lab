@@ -162,9 +162,11 @@ struct nvfp4_runtime {
     cl_kernel fp8_gemv_rows_tiled = nullptr;
     cl_kernel fp8_gemm_tiled = nullptr;
     cl_kernel add = nullptr;
+    cl_kernel weighted_accumulate = nullptr;
     cl_kernel silu_mul = nullptr;
     cl_kernel rmsnorm = nullptr;
     cl_kernel f32_gemv = nullptr;
+    cl_kernel bf16_gemv = nullptr;
     cl_kernel qwen35_prepare_gated_delta = nullptr;
     cl_kernel rmsnorm_silu_gate = nullptr;
     cl_kernel qwen35_full_attention_prepare = nullptr;
@@ -223,9 +225,11 @@ struct nvfp4_runtime {
         if (qwen35_full_attention_prepare) clReleaseKernel(qwen35_full_attention_prepare);
         if (rmsnorm_silu_gate) clReleaseKernel(rmsnorm_silu_gate);
         if (qwen35_prepare_gated_delta) clReleaseKernel(qwen35_prepare_gated_delta);
+        if (bf16_gemv) clReleaseKernel(bf16_gemv);
         if (f32_gemv) clReleaseKernel(f32_gemv);
         if (rmsnorm) clReleaseKernel(rmsnorm);
         if (silu_mul) clReleaseKernel(silu_mul);
+        if (weighted_accumulate) clReleaseKernel(weighted_accumulate);
         if (add) clReleaseKernel(add);
         if (fp8_gemm_tiled) clReleaseKernel(fp8_gemm_tiled);
         if (fp8_gemv_rows_tiled) clReleaseKernel(fp8_gemv_rows_tiled);
@@ -724,9 +728,11 @@ extern "C" NVFP4_API nvfp4_status nvfp4_runtime_create(
         holder->fp8_gemv_rows_tiled = make_kernel("fp8_native_gemv_rows_tiled");
         holder->fp8_gemm_tiled = make_kernel("fp8_native_gemm_tiled");
         holder->add = make_kernel("add_f32");
+        holder->weighted_accumulate = make_kernel("weighted_accumulate_f32");
         holder->silu_mul = make_kernel("silu_mul_f32");
         holder->rmsnorm = make_kernel("rmsnorm_f32");
         holder->f32_gemv = make_kernel("f32_gemv_subgroup");
+        holder->bf16_gemv = make_kernel("bf16_gemv_subgroup");
         holder->qwen35_prepare_gated_delta = make_kernel(
             "qwen35_prepare_gated_delta_decode_f32");
         holder->rmsnorm_silu_gate = make_kernel("rmsnorm_silu_gate_f32");
@@ -1670,6 +1676,58 @@ extern "C" NVFP4_API nvfp4_status nvfp4_add_device_enqueue_f32(
     }
 }
 
+extern "C" NVFP4_API nvfp4_status nvfp4_weighted_accumulate_device_enqueue_f32(
+    nvfp4_runtime * runtime,
+    const nvfp4_buffer * source,
+    float scale,
+    nvfp4_buffer * dst,
+    int elements,
+    int reset) {
+    const size_t bytes = elements > 0
+        ? static_cast<size_t>(elements)*sizeof(float) : 0;
+    if (!runtime || !source || source->runtime != runtime || !dst ||
+        dst->runtime != runtime || elements <= 0 ||
+        source->bytes < bytes || dst->bytes < bytes ||
+        (reset != 0 && reset != 1)) {
+        return fail_invalid("invalid weighted-accumulate buffers or arguments");
+    }
+    try {
+        std::lock_guard<std::mutex> lock(runtime->queue_mutex);
+        cl_uint arg = 0;
+        const cl_uint reset_value = static_cast<cl_uint>(reset);
+        check_cl(clSetKernelArg(runtime->weighted_accumulate, arg++, sizeof(cl_mem),
+                                &source->data),
+                 "clSetKernelArg(weighted_accumulate_source)");
+        check_cl(clSetKernelArg(runtime->weighted_accumulate, arg++, sizeof(float),
+                                &scale),
+                 "clSetKernelArg(weighted_accumulate_scale)");
+        check_cl(clSetKernelArg(runtime->weighted_accumulate, arg++, sizeof(cl_mem),
+                                &dst->data),
+                 "clSetKernelArg(weighted_accumulate_dst)");
+        check_cl(clSetKernelArg(runtime->weighted_accumulate, arg++, sizeof(int),
+                                &elements),
+                 "clSetKernelArg(weighted_accumulate_elements)");
+        check_cl(clSetKernelArg(runtime->weighted_accumulate, arg++, sizeof(cl_uint),
+                                &reset_value),
+                 "clSetKernelArg(weighted_accumulate_reset)");
+        const size_t local = 256;
+        const size_t global = (static_cast<size_t>(elements) + local - 1)/local*local;
+        event_owner event;
+        check_cl(clEnqueueNDRangeKernel(runtime->queue, runtime->weighted_accumulate,
+                                        1, nullptr, &global, &local, 0, nullptr,
+                                        &event.value),
+                 "clEnqueueNDRangeKernel(weighted_accumulate)");
+        runtime->pending_profile_events.push_back(event.value);
+        event.value = nullptr;
+        g_last_error.clear();
+        return NVFP4_STATUS_OK;
+    } catch (const opencl_error & error) {
+        return fail(NVFP4_STATUS_OPENCL_ERROR, error);
+    } catch (const std::exception & error) {
+        return fail(NVFP4_STATUS_INTERNAL_ERROR, error);
+    }
+}
+
 extern "C" NVFP4_API nvfp4_status nvfp4_silu_mul_device_enqueue_f32(
     nvfp4_runtime * runtime,
     const nvfp4_buffer * gate,
@@ -1805,6 +1863,58 @@ extern "C" NVFP4_API nvfp4_status nvfp4_f32_gemv_device_enqueue(
                                         1, nullptr, &global, &local, 0, nullptr,
                                         &event.value),
                  "clEnqueueNDRangeKernel(f32_gemv)");
+        runtime->pending_profile_events.push_back(event.value);
+        event.value = nullptr;
+        g_last_error.clear();
+        return NVFP4_STATUS_OK;
+    } catch (const opencl_error & error) {
+        return fail(NVFP4_STATUS_OPENCL_ERROR, error);
+    } catch (const std::exception & error) {
+        return fail(NVFP4_STATUS_INTERNAL_ERROR, error);
+    }
+}
+
+extern "C" NVFP4_API nvfp4_status nvfp4_bf16_gemv_device_enqueue(
+    nvfp4_runtime * runtime,
+    const nvfp4_buffer * weights,
+    const nvfp4_buffer * x,
+    int rows,
+    int cols,
+    nvfp4_buffer * dst) {
+    if (!runtime || !weights || weights->runtime != runtime || !x ||
+        x->runtime != runtime || !dst || dst->runtime != runtime ||
+        rows <= 0 || cols <= 0 ||
+        static_cast<size_t>(rows) >
+            std::numeric_limits<size_t>::max()/static_cast<size_t>(cols)/sizeof(uint16_t)) {
+        return fail_invalid("invalid enqueued BF16 GEMV arguments");
+    }
+    const size_t weight_bytes = static_cast<size_t>(rows)*cols*sizeof(uint16_t);
+    const size_t input_bytes = static_cast<size_t>(cols)*sizeof(float);
+    const size_t output_bytes = static_cast<size_t>(rows)*sizeof(float);
+    if (weights->bytes < weight_bytes || x->bytes < input_bytes ||
+        dst->bytes < output_bytes) {
+        return fail_invalid("enqueued BF16 GEMV buffer capacity is too small");
+    }
+    try {
+        std::lock_guard<std::mutex> lock(runtime->queue_mutex);
+        cl_uint arg = 0;
+        check_cl(clSetKernelArg(runtime->bf16_gemv, arg++, sizeof(cl_mem),
+                                &weights->data), "clSetKernelArg(bf16_gemv_weights)");
+        check_cl(clSetKernelArg(runtime->bf16_gemv, arg++, sizeof(cl_mem),
+                                &x->data), "clSetKernelArg(bf16_gemv_x)");
+        check_cl(clSetKernelArg(runtime->bf16_gemv, arg++, sizeof(cl_mem),
+                                &dst->data), "clSetKernelArg(bf16_gemv_dst)");
+        check_cl(clSetKernelArg(runtime->bf16_gemv, arg++, sizeof(int), &rows),
+                 "clSetKernelArg(bf16_gemv_rows)");
+        check_cl(clSetKernelArg(runtime->bf16_gemv, arg++, sizeof(int), &cols),
+                 "clSetKernelArg(bf16_gemv_cols)");
+        const size_t local = 64;
+        const size_t global = static_cast<size_t>(rows)*local;
+        event_owner event;
+        check_cl(clEnqueueNDRangeKernel(runtime->queue, runtime->bf16_gemv,
+                                        1, nullptr, &global, &local, 0, nullptr,
+                                        &event.value),
+                 "clEnqueueNDRangeKernel(bf16_gemv)");
         runtime->pending_profile_events.push_back(event.value);
         event.value = nullptr;
         g_last_error.clear();

@@ -8,6 +8,11 @@ The companion FP8 handles retain signed E4M3 weights and BF16 per-row scales.
 Qwen3.5 gated-delta and width-4 causal-convolution handles keep their recurrent
 state on the device across decode calls.
 
+Queueable graph primitives also include direct BF16 GEMV for checkpoint routers
+and scalar gates, plus reset-or-add weighted float32 accumulation for sparse
+expert reduction. These preserve BF16 router storage and keep routed expert
+outputs resident until the graph's explicit materialization boundary.
+
 The bandwidth-campaign ABI also exposes OpenCL/SVM capability metadata, raw
 checksum-protected CPU/GPU streaming reads, and fine-grained-SVM native matrix
 handles. `nvfp4_matrix_upload_shared_svm` copies checkpoint bytes once into SVM,

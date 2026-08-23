@@ -202,12 +202,13 @@ with exact request-state oracle matches. SVM is now the plugin default, with
 the conventional path.
 
 The same runtime now covers the sparse 35B checkpoint's native expert shapes.
-One routed top-8 layer consumes 14.16 MB of native payload and takes 0.6477 ms
-kernel time across eight real experts. Expert-0 oracle error is `4.66e-10`.
-This makes expert execution promising enough to pursue, but the next MoE gate
-must add native router selection, the always-on shared expert, weighted output
-reduction, and a staged weight-residency policy before claiming layer or model
-throughput.
+Eight fixed real experts consume 14.16 MB of native payload in 0.6477 ms. The
+checkpoint-routed successor adds a BF16 router and shared gate, exact top-8
+renormalization, the always-on shared NVFP4 expert, and device weighted output
+reduction. It measures 0.8230 ms kernel / 1.2767 ms wall over 30 samples, with
+exact selected expert IDs and `1.16e-9` final-output maximum error. The remaining
+MoE graph gap is device-resident top-k/indirect dispatch plus staged full-model
+expert residency, not expert arithmetic correctness.
 
 ## First decoder benchmarks
 

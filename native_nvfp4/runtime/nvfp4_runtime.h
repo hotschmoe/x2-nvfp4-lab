@@ -278,6 +278,14 @@ NVFP4_API nvfp4_status nvfp4_add_device_enqueue_f32(
     int elements,
     nvfp4_buffer * dst);
 
+NVFP4_API nvfp4_status nvfp4_weighted_accumulate_device_enqueue_f32(
+    nvfp4_runtime * runtime,
+    const nvfp4_buffer * source,
+    float scale,
+    nvfp4_buffer * dst,
+    int elements,
+    int reset);
+
 NVFP4_API nvfp4_status nvfp4_silu_mul_device_enqueue_f32(
     nvfp4_runtime * runtime,
     const nvfp4_buffer * gate,
@@ -295,6 +303,14 @@ NVFP4_API nvfp4_status nvfp4_rmsnorm_device_enqueue_f32(
     nvfp4_buffer * dst);
 
 NVFP4_API nvfp4_status nvfp4_f32_gemv_device_enqueue(
+    nvfp4_runtime * runtime,
+    const nvfp4_buffer * weights,
+    const nvfp4_buffer * x,
+    int rows,
+    int cols,
+    nvfp4_buffer * dst);
+
+NVFP4_API nvfp4_status nvfp4_bf16_gemv_device_enqueue(
     nvfp4_runtime * runtime,
     const nvfp4_buffer * weights,
     const nvfp4_buffer * x,

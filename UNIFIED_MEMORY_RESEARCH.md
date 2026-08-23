@@ -273,6 +273,88 @@ The runtime should therefore use:
 - drift-triggered rather than periodic re-probing when alternatives cannot
   co-reside safely.
 
+### MLX comparison after the SVM measurements
+
+MLX's most transferable idea is not merely that Apple silicon has unified
+memory. It makes arrays locationless, places each operation on a CPU or GPU
+stream, records dependencies, and evaluates useful groups of operations at one
+materialization boundary. Its lazy-evaluation guidance explicitly warns that
+too-frequent evaluation pays fixed overhead and that scalar access used for
+control flow forces evaluation.
+
+The native runtime now has the same useful ingredients at a lower level:
+
+- SVM-backed weights are locationless between ARM64 and Adreno within the
+  capabilities exposed by this OpenCL driver;
+- the in-order OpenCL queue records a resident graph and one `synchronize()`
+  materializes a measured stage;
+- CPU/GPU raw contention tests decide operation placement rather than the UMA
+  label;
+- the checkpoint-routed MoE graph currently has one unavoidable host control
+  boundary for top-k selection.
+
+The routed MoE measurement makes that last point concrete. GPU BF16 routing,
+the always-on shared expert, eight selected NVFP4 experts, weighted reduction,
+and the shared gate take 0.8230 ms of kernel time, but the two-stage wall time is
+1.2767 ms. Host top-k arithmetic itself is only 0.0192 ms median; queue
+materialization and small downloads dominate the remaining gap. A device top-k
+kernel and indirect expert dispatch are therefore higher priority than
+optimizing the host softmax routine.
+
+## What DGX Spark runtimes contribute
+
+DGX Spark is a useful comparison, but not a performance proxy for Snapdragon.
+NVIDIA documents 128 GB of LPDDR5x unified system memory at 273 GB/s on GB10,
+alongside a Blackwell GPU with 6,144 CUDA cores and fifth-generation Tensor
+Cores. The memory topology is analogous at a high level; the compute ISA,
+software stack, power envelope, and native NVFP4 acceleration are materially
+stronger and different.
+
+### vLLM and SGLang: budget the shared pool explicitly
+
+NVIDIA's current Spark vLLM recipe emphasizes PagedAttention, continuous
+batching, `--gpu-memory-utilization`, maximum model length, and maximum sequence
+count. Its SGLang recipe similarly recommends lowering
+`--mem-fraction-static` to roughly 0.70-0.75 under UMA memory pressure, with
+context length and concurrency determining KV allocation. Spark's unified pool
+increases the capacity envelope, but these runtimes still reserve and police
+weights, KV, graph scratch, and concurrency explicitly.
+
+That reinforces this project's budget-aware registry design:
+
+- reserve headroom for Windows, the display, driver, and transient scratch;
+- treat paged KV and recurrent state as first-class consumers beside weights;
+- expose maximum context and concurrency as admission-control inputs;
+- do not infer allocatable accelerator memory from installed physical memory;
+- preserve one native representation, then make residency and cache decisions
+  at scheduler-safe points.
+
+### Atlas: specialize the complete hot path
+
+Atlas is a newer open-source Rust/CUDA engine specialized for GB10 and specific
+model/quantization pairs. Its documentation describes hand-tuned SM121 kernels
+for NVFP4, attention, recurrent layers, MoE routing, and paged FP8 KV, with no
+Python, PyTorch, Triton JIT, or runtime compilation in the serving hot path. Its
+published throughput comparisons are project-reported and have not been
+independently reproduced here, so they are research leads rather than campaign
+baselines.
+
+The transferable lesson is the scope of specialization: optimizing one GEMV is
+insufficient when routing synchronization, graph dispatch, attention, state,
+sampling, and HTTP scheduling remain generic. The current native C ABI plus a
+thin vLLM lifecycle adapter follows the same separation: keep the model/hardware
+hot path compiled and resident, while retaining a mature external scheduler and
+OpenAI-compatible API until measurements justify replacing more of it.
+
+### llama.cpp: a useful deployment and MTP reference
+
+NVIDIA's Spark llama.cpp recipe builds directly for GB10's `sm_121` CUDA target,
+offloads the model, exposes an OpenAI-compatible server, and documents MTP
+speculative decoding for compatible Qwen checkpoints. This supports the current
+plan to investigate the local checkpoint's MTP head after baseline decode is
+correct: reducing full-model weight streams per accepted token may be more
+valuable than forcing CPU/GPU co-execution across a shared memory bottleneck.
+
 ## Shared allocation design
 
 The current runtime creates matrix buffers with `CL_MEM_COPY_HOST_PTR`. The
@@ -448,6 +530,45 @@ The earlier crashes make benchmark containment part of the architecture:
 - do not run full-model Vulkan offload on the current driver;
 - use exact CPU or staged-device oracles at every new shape and layer-count gate.
 
+## Research queue: things we want to investigate
+
+Prioritized next questions, including work not yet performed:
+
+1. **Device-resident MoE dispatch.** Implement stable 256-way softmax/top-8,
+   selected-weight renormalization, and indirect expert dispatch without the
+   current host readback; compare a fused kernel with a small radix/bitonic
+   selection pipeline.
+2. **Atlas kernel and graph structure.** Audit its open-source Qwen3.5/GB10 MoE,
+   recurrent-layer, paged-KV, CUDA-graph, and MTP paths for reusable scheduling
+   patterns, while separating CUDA/SM121-only techniques from portable ones.
+3. **MLX allocator and scheduling internals.** Trace how locationless arrays,
+   stream dependencies, batched `eval`, buffer reuse, and wired-memory limits
+   avoid redundant materialization; test equivalent lifetime classes in the
+   SVM arena.
+4. **vLLM versus SGLang control-plane A/B.** Once a complete native token step
+   exists, put the same executor behind each scheduler and compare request
+   admission, prefix reuse, continuous batching, cancellation, structured
+   output, and coding-client compatibility. Backend replacement is not useful
+   before this common native boundary exists.
+5. **Memory-pressure behavior.** Stage 1/2/4/8 GiB SVM residency, record Windows
+   commit and OpenCL budgets, force neither swapping nor driver reset, and
+   determine whether eviction is predictable enough for an elastic layer or
+   expert cache.
+6. **Expert residency policy.** Measure per-layer routing locality over real
+   coding traces, determine whether all 256 experts fit inside the safe OpenCL
+   budget, and compare full residency, layer streaming, and frequency-aware
+   caching.
+7. **MTP speculative decode.** Identify the checkpoint's exact MTP graph, build
+   an acceptance-correct device path, and measure accepted tokens per expensive
+   main-model weight stream.
+8. **NPU registered memory.** Measure whether QAIRT/QNN can consume a registered
+   view of the same underlying allocation, its dispatch floor, and contention
+   with Adreno and Oryon before assigning it any production work.
+9. **Sustained thermal behavior and counters.** Add cooldown/sustained protocols
+   and obtain Qualcomm compiler/occupancy/memory-counter evidence so the gap
+   between 34.22 GB/s useful NVFP4 delivery and the 129 GB/s raw ceiling can be
+   attributed rather than guessed.
+
 ## Research sources
 
 - [FreeToken paper](https://arxiv.org/html/2608.16157)
@@ -455,6 +576,12 @@ The earlier crashes make benchmark containment part of the architecture:
 - [MLX unified memory](https://ml-explore.github.io/mlx/build/html/usage/unified_memory.html)
 - [MLX streams](https://ml-explore.github.io/mlx/build/html/usage/using_streams.html)
 - [MLX lazy evaluation](https://ml-explore.github.io/mlx/build/html/usage/lazy_evaluation.html)
+- [DGX Spark hardware overview](https://docs.nvidia.com/dgx/dgx-spark/hardware.html)
+- [NVIDIA DGX Spark vLLM recipe](https://build.nvidia.com/spark/vllm/i)
+- [NVIDIA DGX Spark SGLang recipe](https://build.nvidia.com/spark/sglang/instructions)
+- [NVIDIA DGX Spark llama.cpp recipe](https://build.nvidia.com/spark/llama-cpp/instructions)
+- [Atlas inference engine](https://atlasinference.io/)
+- [Atlas Spark engineering journey](https://github.com/Avarok-Cybersecurity/atlas/blob/main/docs/ATLAS_SPARK_JOURNEY.md)
 - [FusionML paper](https://arxiv.org/html/2607.22785)
 - [Khronos OpenCL SVM allocation](https://registry.khronos.org/OpenCL/specs/unified/refpages/man/html/clSVMAlloc.html)
 - [Khronos OpenCL buffer creation](https://registry.khronos.org/OpenCL/specs/unified/refpages/man/html/clCreateBuffer.html)

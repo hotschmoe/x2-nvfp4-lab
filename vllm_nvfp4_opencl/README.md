@@ -14,6 +14,7 @@ The current boundary is deliberately explicit:
   four-layer decode cadence.
 - Device-resident RMSNorm, gated norm, elementwise, layout, convolution, and
   gated-delta operators.
+- Native BF16 router/gate GEMV and weighted sparse-expert accumulation.
 - Direct ARM64 NEON NVFP4 GEMV for hybrid placement.
 - Fine-grained buffer SVM is the default native NVFP4 backing. The model-specific
   loader can release its source arrays after the one file-to-SVM copy; generic

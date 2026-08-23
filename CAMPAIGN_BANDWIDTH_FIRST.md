@@ -543,10 +543,13 @@ Paged scheduler wall time fell from 52.674 to 31.273 ms at batch one and from
 independent contiguous-cache session through the 16-token page boundary.
 
 The same shared-SVM kernel path also passed the 35B MoE checkpoint's native
-expert shapes. Eight real layer-0 experts (2048->512->2048) execute in a
-0.6477 ms median kernel interval with `4.66e-10` expert-0 oracle error. This is a
-micrograph only: router selection, shared expert, weighted reduction, attention,
-and full-model residency remain open.
+expert shapes. Eight fixed real layer-0 experts (2048->512->2048) execute in a
+0.6477 ms median kernel interval. The next routed micrograph adds native BF16
+router/shared-gate GEMV, exact checkpoint top-8 selection and renormalization,
+the always-on shared NVFP4 expert, and device weighted reduction. Its 30-sample
+median is 0.8230 ms kernel / 1.2767 ms wall with exact selected IDs and
+`1.16e-9` final-output maximum error. Device-resident selection/indirect
+dispatch, attention, and full-model expert residency remain open.
 
 An explicit `uchar8` packed-load treatment was also tested. Qualcomm's compiler
 rejected dynamic vector indexing; materializing the vector through a private
@@ -560,6 +563,7 @@ Reproduction entry points:
 - `native_nvfp4/bench_islands.py`
 - `native_nvfp4/bench_svm_matrix.py`
 - `native_nvfp4/bench_moe_experts.py`
+- `native_nvfp4/bench_moe_routed_layer.py`
 - `campaign_results/bandwidth-first/*.json`
 - `logs/20260822-194606-767.stdout.log` (complete SVM MLP)
 - `logs/20260822-194623-106.stdout.log` (complete SVM decoder layer)

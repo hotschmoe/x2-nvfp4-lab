@@ -450,6 +450,20 @@ kernel void add_f32(
     }
 }
 
+kernel void weighted_accumulate_f32(
+    global const float * source,
+    float scale,
+    global float * dst,
+    uint elements,
+    uint reset
+) {
+    const uint index = get_global_id(0);
+    if (index < elements) {
+        const float previous = reset != 0 ? 0.0f : dst[index];
+        dst[index] = previous + scale*source[index];
+    }
+}
+
 kernel void silu_mul_f32(
     global const float * gate,
     global const float * up,
@@ -511,6 +525,32 @@ kernel void f32_gemv_subgroup(
     float sum = 0.0f;
     for (uint col = lane; col < cols; col += NVFP4_SUBGROUP_WIDTH) {
         sum += weights[row*cols + col]*x[col];
+    }
+    sum = sub_group_reduce_add(sum);
+    if (lane == 0) {
+        dst[row] = sum;
+    }
+}
+
+// Router and gate weights remain BF16 in Qwen3.5 checkpoints. Reading them
+// directly avoids doubling their resident footprint solely for graph setup.
+__attribute__((reqd_work_group_size(NVFP4_SUBGROUP_WIDTH, 1, 1)))
+__attribute__((qcom_reqd_sub_group_size("half")))
+kernel void bf16_gemv_subgroup(
+    global const ushort * weights,
+    global const float * x,
+    global float * dst,
+    uint rows,
+    uint cols
+) {
+    const uint row = get_group_id(0);
+    const uint lane = get_sub_group_local_id();
+    if (row >= rows) {
+        return;
+    }
+    float sum = 0.0f;
+    for (uint col = lane; col < cols; col += NVFP4_SUBGROUP_WIDTH) {
+        sum += bf16_to_fp32(weights[row*cols + col])*x[col];
     }
     sum = sub_group_reduce_add(sum);
     if (lane == 0) {

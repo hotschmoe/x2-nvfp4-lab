@@ -304,3 +304,31 @@ Artifacts:
 - `native_nvfp4/bench_moe_experts.py`
 - `campaign_results/bandwidth-first/20260822-195228-287591-moe-experts.json`
 - `logs/20260822-195227-227.stdout.log`
+
+### Checkpoint-routed layer micrograph
+
+The next gate adds the checkpoint BF16 router and shared-expert gate, exact
+softmax/top-8 selection and renormalization, the always-on NVFP4 shared expert,
+eight routed NVFP4 experts, and device-side weighted accumulation. Layer 0 chose
+experts `[60, 111, 188, 144, 224, 92, 105, 252]` for the deterministic test
+activation.
+
+| Stage | Median time |
+|---|---:|
+| BF16 router + shared gate + shared NVFP4 expert | 0.1162 ms kernel |
+| Eight selected experts + weighted reductions | 0.7064 ms kernel |
+| Complete routed MoE micrograph | 0.8230 ms kernel |
+| Host softmax/top-8 work | 0.0192 ms |
+| Two-stage end-to-end wall | 1.2767 ms |
+
+The 30-sample run consumed 16,977,920 logical native bytes per step. GPU router
+IDs matched the independent BF16 CPU route exactly, selected routing weights
+had `7.45e-9` maximum absolute error, and the final 2048-element output had
+`1.16e-9` maximum absolute error. The host top-k forces a device materialization
+boundary; moving selection and indirect dispatch onto the device is the next
+graph-level optimization.
+
+This remains a one-token MoE-layer micrograph. Attention, input/output norms,
+residuals, sampling, complete-model residency, and serving overhead are not
+included. Reproduction artifact:
+`campaign_results/bandwidth-first/20260822-200044-231748-moe-routed-layer.json`.
