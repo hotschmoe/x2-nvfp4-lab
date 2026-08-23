@@ -1,0 +1,82 @@
+{
+  "campaign": "bandwidth-first",
+  "schema_version": 1,
+  "timestamp": "2026-08-23T04:48:35+00:00",
+  "hardware": {
+    "system_model": "ASUS Zenbook A16 UX3607OA",
+    "gpu": "Qualcomm(R) Adreno(TM) X2-90 GPU"
+  },
+  "software": {
+    "command": [
+      "native_nvfp4/bench_dense_full_model.py",
+      "--gates",
+      "32",
+      "--max-tokens",
+      "32768",
+      "--kv-dtype",
+      "bf16",
+      "--warmups",
+      "0",
+      "--samples",
+      "1"
+    ]
+  },
+  "environment": {
+    "power_source": "AC",
+    "battery_percent": 99,
+    "thermal_regime": "warm-burst"
+  },
+  "workload": {
+    "operation": "dense_qwen_full_text_registry_and_token",
+    "layers_loaded": 32,
+    "gate_layer_counts": [
+      32
+    ],
+    "max_tokens": 32768,
+    "kv_dtype": "bf16",
+    "lazy_embedding_rows_touched": 1,
+    "optional_vision_loaded": false,
+    "optional_mtp_loaded": false,
+    "nvfp4_mlp_layers": 32,
+    "fp8_mlp_layers": 0
+  },
+  "loading": {
+    "load_and_validate_seconds": 7.575827100081369,
+    "total_load_benchmark_and_teardown_seconds": 8.481561199994758,
+    "resident_checkpoint_native_payload_bytes": 9719548192,
+    "complete_text_compute_payload_bytes": 19103683968
+  },
+  "memory": {
+    "baseline_available_physical_bytes": 39717646336,
+    "before_release_available_physical_bytes": 27622240256,
+    "after_release_available_physical_bytes": 39700131840,
+    "recovered_on_release_bytes": 12077891584,
+    "reported_opencl_global_budget_bytes": 25563234304
+  },
+  "gates": [
+    {
+      "layers_resident": 32,
+      "last_layer": 31,
+      "checkpoint_native_payload_bytes": 9719548192,
+      "available_physical_bytes": 17889705984,
+      "available_delta_bytes": -21827940352,
+      "last_layer_composition_maximum_absolute_error": 0.0,
+      "last_layer_mlp_format": "nvfp4"
+    }
+  ],
+  "full_token": null,
+  "correctness": {
+    "passed": true,
+    "gates_validated": 1,
+    "maximum_gate_layer_error": 0.0,
+    "complete_text_payload_accounted": true,
+    "full_token_executed": false,
+    "explicit_completion_marker": true
+  },
+  "limitations": [
+    "one request and one decoded token; sustained generation is not measured",
+    "greedy argmax is performed after downloading full logits",
+    "available physical memory is system-wide, not an OpenCL allocator counter",
+    "vision and MTP tensors are intentionally excluded from the coding endpoint"
+  ]
+}

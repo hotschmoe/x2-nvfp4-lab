@@ -313,6 +313,19 @@ length-capped precursor demonstrated why EOS handling is mandatory: tokens
 after 248046 were unrelated garbage. The current loop loads both official stop
 IDs and reports `finish_reason=stop`.
 
+Dense 27B now passes its complete residency boundary as well. Its exact
+19,103,683,968-byte text payload mixes 56 native NVFP4 MLP layers with eight
+row-scaled FP8 MLP layers, row-scaled FP8 attention, and a full FP8 vocabulary
+head. A 2,147,483,648-byte 32K BF16 KV pool and all recurrent state coexist with
+the weights. The full token measures 511.9609 ms kernel / 519.9734 ms wall, or
+1.923 tok/s, with bit-identical queued and layer-synchronized logits.
+
+Closing each safetensors layer mapping immediately after upload is essential.
+One successful whole-file-mapping probe transiently left only 465 MB available;
+the per-layer loader leaves 19.60 GB at the same complete device-residency gate
+and returns 21.68 GB on teardown. Source lifetime, not final capacity, was the
+dangerous part.
+
 ## First decoder benchmarks
 
 Direct row-scaled FP8 kernels now accompany NVFP4 in the persistent runtime. A

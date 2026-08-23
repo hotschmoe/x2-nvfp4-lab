@@ -38,6 +38,9 @@ The current boundary is deliberately explicit:
   all 40 Ornith layers, 32K BF16 state, final NVFP4 head, and tokenizer-backed
   greedy generation at 11.75 end-to-end tok/s. Moving that registry/session
   boundary into this package is the immediate integration task.
+- Dense 27B full residency also passes outside the adapter, including its last
+  eight row-scaled-FP8 MLPs and row-scaled-FP8 LM head. The packaged graph now
+  exposes resident FP8 MLP and LM-head fragments for that mixed checkpoint.
 
 The backend is opt-in so installing the plugin cannot hijack unrelated CPU
 vLLM deployments:

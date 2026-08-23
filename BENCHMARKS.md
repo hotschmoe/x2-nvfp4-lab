@@ -678,3 +678,39 @@ requests top-k 20, top-p 0.95, temperature 1.0.
 
 Canonical artifact:
 `20260823-044101-661462-moe-full-model-generation.json`.
+
+## Complete dense 27B text-model residency and token
+
+The dense checkpoint's exact mixed policy is now represented end to end. Layers
+0-55 retain checkpoint-native NVFP4 MLPs, layers 56-63 retain row-scaled FP8
+MLPs, every attention projection is row-scaled FP8, and the 248,320x5,120 LM
+head is row-scaled FP8. No matrix is expanded merely to normalize formats.
+
+The loader maps and closes one layer at a time. Keeping the entire 22.6 GB
+safetensors source mapping open during an initial successful probe drove
+available memory down to 465 MB at layer 64. Per-layer source lifetimes leave
+19.60 GB available at the same gate while device residency is unchanged. This
+is the direct practical payoff from the MLX-style lazy/lifetime research.
+
+| Resident layers | Checkpoint-native text payload | Available physical memory | Last-layer format | Composition error |
+|---:|---:|---:|---|---:|
+| 16 | 5,495,726,736 B | 33,519,509,504 B | NVFP4 MLP | `0` |
+| 32 | 9,719,548,192 B | 29,185,019,904 B | NVFP4 MLP | `0` |
+| 48 | 13,943,369,648 B | 24,874,496,000 B | NVFP4 MLP | `0` |
+| 56 | 16,055,280,376 B | 22,718,398,464 B | NVFP4 MLP | `0` |
+| 60 | 17,579,482,172 B | 21,159,673,856 B | FP8 MLP | `0` |
+| 64 | 19,103,683,968 B | 19,604,447,232 B | FP8 MLP | `0` |
+
+The complete payload exactly matches the metadata inventory's 17.792 GiB text
+compute set. The shared 32K BF16 pool adds exactly 2,147,483,648 bytes of KV
+capacity across 16 full-attention layers. Recurrent/conv state and reusable
+activations are also live. Closing the registry returns 21,683,474,432 bytes.
+
+| Complete token | Median kernel | Median wall | Wall throughput | Output token | Composition error |
+|---|---:|---:|---:|---:|---:|
+| Dense 64 layers + FP8 head | 511.9609 ms | 519.9734 ms | 1.923 tok/s | 17 | `0` |
+
+This is a real complete checkpoint token from a lazy BF16 embedding row, not a
+four-layer projection. The token uses a raw BOS seed; retained-state
+tokenizer-backed generation remains the next dense qualification. Canonical
+artifact: `20260823-045207-005011-dense-full-model-token.json`.

@@ -31,6 +31,11 @@ decodes at 11.75 end-to-end tok/s. It generates valid Python, stops on the
 official `<|im_end|>` token, and matches a layer-synchronized replay exactly at
 every generated position.
 
+Dense 27B also reaches the full boundary: all 64 layers, 32K BF16 KV, mixed
+56-layer NVFP4/eight-layer FP8 MLP policy, and its full FP8 LM head measure
+511.961 ms kernel / 519.973 ms wall (1.923 tok/s). Per-layer checkpoint source
+mapping keeps transient load memory safely separate from final residency.
+
 ## Runtime contract to build next
 
 Completed foundations:

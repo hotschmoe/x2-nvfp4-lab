@@ -556,56 +556,60 @@ Prioritized next questions, including work not yet performed:
    decode tok/s. Replace sequential prefill with shared-weight GEMM batching,
    add the official top-k 20/top-p 0.95 sampler, and expose request cancellation
    and streaming through the worker boundary.
-2. **Further MoE fusion.** Device-resident 256-way top-8 and contiguous-bank
+2. **Dense retained-state generation.** Dense 27B complete residency now passes
+   at 1.923 tok/s with 32K BF16 KV. Add its tokenizer-backed prompt loop, EOS
+   handling, and sustained thermal gate, then profile the 56 NVFP4 versus eight
+   FP8 MLP layers separately.
+3. **Further MoE fusion.** Device-resident 256-way top-8 and contiguous-bank
    dispatch now pass. Next compare fused gate/up, SiLU/down, shared-slot, and
    weighted-reduction variants, and expose per-kernel component timing.
-3. **Atlas kernel and graph structure.** Audit its open-source Qwen3.5/GB10 MoE,
+4. **Atlas kernel and graph structure.** Audit its open-source Qwen3.5/GB10 MoE,
    recurrent-layer, paged-KV, CUDA-graph, and MTP paths for reusable scheduling
    patterns, while separating CUDA/SM121-only techniques from portable ones.
-4. **MLX allocator and scheduling internals.** Trace how locationless arrays,
+5. **MLX allocator and scheduling internals.** Trace how locationless arrays,
    stream dependencies, batched `eval`, buffer reuse, and wired-memory limits
    avoid redundant materialization; test equivalent lifetime classes in the
    SVM arena.
-5. **vLLM versus SGLang control-plane A/B.** Once a complete native token step
+6. **vLLM versus SGLang control-plane A/B.** Once a complete native token step
    exists, put the same executor behind each scheduler and compare request
    admission, prefix reuse, continuous batching, cancellation, structured
    output, and coding-client compatibility. Backend replacement is not useful
    before this common native boundary exists.
-6. **Memory pressure beyond 8 GiB.** The real 1/2/4/8 GiB-class SVM ladder passes
-   through 19 banks/8.64 GB and releases 8.54 GB immediately. The exact
-   checkpoint/state inventory is now complete; next execute 24/30/35/40-bank
-   gates while adding non-expert weights and serving state in policy order.
-7. **Expert residency policy.** Measure per-layer routing locality over real
+7. **Multi-request memory pressure.** Complete one-request residency now passes
+   for both models, including 40 MoE banks and dense 32K BF16 KV. Add a second
+   request's KV/recurrent state, cancellation, page reclamation, and admission
+   control while keeping the single immutable weight registry.
+8. **Expert residency policy.** Measure per-layer routing locality over real
    coding traces, determine whether all 256 experts fit inside the safe OpenCL
    budget, and compare full residency, layer streaming, and frequency-aware
    caching.
-8. **MTP speculative decode.** Identify the checkpoint's exact MTP graph, build
+9. **MTP speculative decode.** Identify the checkpoint's exact MTP graph, build
    an acceptance-correct device path, and measure accepted tokens per expensive
    main-model weight stream.
-9. **NPU registered memory.** Measure whether QAIRT/QNN can consume a registered
+10. **NPU registered memory.** Measure whether QAIRT/QNN can consume a registered
    view of the same underlying allocation, its dispatch floor, and contention
    with Adreno and Oryon before assigning it any production work.
-10. **Sustained thermal behavior and counters.** Add cooldown/sustained protocols
+11. **Sustained thermal behavior and counters.** Add cooldown/sustained protocols
    and obtain Qualcomm compiler/occupancy/memory-counter evidence so the gap
    between 34.22 GB/s useful NVFP4 delivery and the 129 GB/s raw ceiling can be
    attributed rather than guessed.
-11. **KV precision and long-context quality.** BF16 now covers dense and MoE
+12. **KV precision and long-context quality.** BF16 now covers dense and MoE
     head profiles. Next compare FP32/BF16/FP8 perplexity and coding-task behavior
     at 32K/64K/128K with prefix reuse and concurrent requests.
 
-The immediate memory question is now sharper: one full expert bank is 454.75 MB
-and 40 banks are 16.94 GiB. The complete safetensors checkpoint is 21.81 GiB,
-while OpenCL reports 23.81 GiB of global memory. That leaves roughly 2 GiB for
-KV, recurrent state, embeddings, LM head, activations, scratch, driver behavior,
-and safety margin. Do not jump directly to 40 banks; use staged cumulative
-residency and retain layer streaming/cache as a policy arm.
+The one-request memory question is now answered empirically. All 40 MoE banks
+and 19,807,914,740 bytes of Ornith text payload coexist with 32K BF16 state; the
+dense model retains 19,103,683,968 bytes of text payload plus exactly 2 GiB of
+32K BF16 KV. Both release cleanly. Admission policy for additional requests and
+longer contexts remains a separate qualification and must not reuse this
+single-request success as proof.
 
 The bounded experiment subsequently retained 19 actual checkpoint layer banks
 at once (8,640,331,776 bytes), validated each routed output, and observed
 8,540,033,024 bytes return immediately on destruction. Available physical
-memory at the maximum gate remained 30.70 GB. This establishes a safe current
-gate, not a full-model guarantee, because the experiment deliberately excluded
-all non-expert resident tensors and serving state.
+memory at the maximum gate remained 30.70 GB. That historical gate justified
+the later 24/30/35/40 ladder; the subsequent complete model run now supersedes
+it as the one-request residency evidence.
 
 ## Exact residency policy derived from both checkpoints
 

@@ -690,6 +690,187 @@ class ResidentNvFp4LmHead:
             self.close()
 
 
+class ResidentFp8LmHead:
+    """Final RMSNorm plus a row-scaled FP8 vocabulary projection."""
+
+    def __init__(
+        self,
+        runtime: Runtime,
+        norm_weight: np.ndarray,
+        lm_head: Fp8Matrix,
+        epsilon: float = 1e-6,
+    ):
+        if (
+            norm_weight.ndim != 1
+            or norm_weight.dtype != np.float32
+            or not norm_weight.flags.c_contiguous
+        ):
+            raise ValueError("norm_weight must be contiguous float32 [hidden]")
+        if lm_head.cols != norm_weight.size:
+            raise ValueError("LM head input width must match final norm")
+        if epsilon < 0:
+            raise ValueError("epsilon must be nonnegative")
+        self.runtime = runtime
+        self.lm_head = lm_head
+        self.hidden_size = norm_weight.size
+        self.vocab_size = lm_head.rows
+        self.epsilon = epsilon
+        self._closed = False
+        self.norm_weight = runtime.upload_buffer(
+            np.ascontiguousarray(norm_weight + np.float32(1.0))
+        )
+        self.normalized = runtime.create_buffer(
+            self.hidden_size * np.dtype(np.float32).itemsize
+        )
+        self.logits = runtime.create_buffer(
+            self.vocab_size * np.dtype(np.float32).itemsize
+        )
+
+    def enqueue(self, hidden: DeviceBuffer) -> DeviceBuffer:
+        if self._closed:
+            raise RuntimeError("resident FP8 LM head is closed")
+        hidden_bytes = self.hidden_size * np.dtype(np.float32).itemsize
+        if hidden.bytes < hidden_bytes:
+            raise ValueError("hidden buffer is smaller than final norm width")
+        self.runtime.rmsnorm_device(
+            hidden,
+            self.norm_weight,
+            1,
+            self.hidden_size,
+            self.epsilon,
+            self.normalized,
+        )
+        return self.runtime.linear_fp8_device(
+            self.lm_head,
+            self.normalized,
+            1,
+            out=self.logits,
+            enqueue=True,
+        )
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self.logits.close()
+        self.normalized.close()
+        self.norm_weight.close()
+        self._closed = True
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        self.close()
+
+    def __del__(self) -> None:
+        if hasattr(self, "_closed"):
+            self.close()
+
+
+class ResidentFp8Mlp:
+    """One-token RMSNorm + row-scaled FP8 gated MLP + residual graph."""
+
+    def __init__(
+        self,
+        runtime: Runtime,
+        norm_weight: np.ndarray,
+        gate: Fp8Matrix,
+        up: Fp8Matrix,
+        down: Fp8Matrix,
+        epsilon: float = 1e-6,
+    ):
+        if (
+            norm_weight.ndim != 1
+            or norm_weight.dtype != np.float32
+            or not norm_weight.flags.c_contiguous
+        ):
+            raise ValueError("norm_weight must be contiguous float32 [hidden]")
+        hidden = norm_weight.size
+        if gate.cols != hidden or up.cols != hidden or gate.rows != up.rows:
+            raise ValueError("gate/up dimensions do not match RMSNorm width")
+        if down.cols != gate.rows or down.rows != hidden:
+            raise ValueError("down projection dimensions do not match gate/up")
+        if epsilon < 0:
+            raise ValueError("epsilon must be nonnegative")
+        self.runtime = runtime
+        self.gate = gate
+        self.up = up
+        self.down = down
+        self.hidden_size = hidden
+        self.intermediate_size = gate.rows
+        self.epsilon = epsilon
+        self._closed = False
+        self._buffers: list[DeviceBuffer] = []
+
+        def create(elements: int) -> DeviceBuffer:
+            buffer = runtime.create_buffer(elements * np.dtype(np.float32).itemsize)
+            self._buffers.append(buffer)
+            return buffer
+
+        self.norm_weight = runtime.upload_buffer(
+            np.ascontiguousarray(norm_weight + np.float32(1.0))
+        )
+        self._buffers.append(self.norm_weight)
+        self.norm = create(hidden)
+        self.gate_output = create(gate.rows)
+        self.up_output = create(up.rows)
+        self.activation = create(gate.rows)
+        self.down_output = create(hidden)
+
+    def enqueue(self, x: DeviceBuffer, out: DeviceBuffer) -> DeviceBuffer:
+        if self._closed:
+            raise RuntimeError("resident FP8 MLP is closed")
+        hidden_bytes = self.hidden_size * np.dtype(np.float32).itemsize
+        if x.bytes < hidden_bytes or out.bytes < hidden_bytes:
+            raise ValueError("input/output buffer is smaller than hidden size")
+        self.runtime.rmsnorm_device(
+            x,
+            self.norm_weight,
+            1,
+            self.hidden_size,
+            self.epsilon,
+            self.norm,
+        )
+        self.runtime.linear_fp8_device(
+            self.gate, self.norm, 1, out=self.gate_output, enqueue=True
+        )
+        self.runtime.linear_fp8_device(
+            self.up, self.norm, 1, out=self.up_output, enqueue=True
+        )
+        self.runtime.silu_mul_device(
+            self.gate_output,
+            self.up_output,
+            self.intermediate_size,
+            self.activation,
+        )
+        self.runtime.linear_fp8_device(
+            self.down,
+            self.activation,
+            1,
+            out=self.down_output,
+            enqueue=True,
+        )
+        return self.runtime.add_device(x, self.down_output, self.hidden_size, out)
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        for buffer in reversed(self._buffers):
+            buffer.close()
+        self._buffers.clear()
+        self._closed = True
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        self.close()
+
+    def __del__(self) -> None:
+        if hasattr(self, "_closed"):
+            self.close()
+
+
 class ResidentBatchedNvFp4Mlp:
     """Multi-request RMSNorm + NVFP4 MLP using shared-weight GEMM kernels."""
 
@@ -891,6 +1072,8 @@ class ResidentQwen35DecodeCadence:
 
 __all__ = [
     "ResidentBatchedNvFp4Mlp",
+    "ResidentFp8LmHead",
+    "ResidentFp8Mlp",
     "ResidentNvFp4LmHead",
     "ResidentNvFp4Mlp",
     "ResidentQwen35DecodeCadence",

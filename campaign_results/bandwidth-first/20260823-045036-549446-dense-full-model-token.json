@@ -1,0 +1,156 @@
+{
+  "campaign": "bandwidth-first",
+  "schema_version": 1,
+  "timestamp": "2026-08-23T04:50:36+00:00",
+  "hardware": {
+    "system_model": "ASUS Zenbook A16 UX3607OA",
+    "gpu": "Qualcomm(R) Adreno(TM) X2-90 GPU"
+  },
+  "software": {
+    "command": [
+      "native_nvfp4/bench_dense_full_model.py",
+      "--gates",
+      "16,32,48,56,60,64",
+      "--max-tokens",
+      "32768",
+      "--kv-dtype",
+      "bf16",
+      "--warmups",
+      "1",
+      "--samples",
+      "5"
+    ]
+  },
+  "environment": {
+    "power_source": "AC",
+    "battery_percent": 99,
+    "thermal_regime": "warm-burst"
+  },
+  "workload": {
+    "operation": "dense_qwen_full_text_registry_and_token",
+    "layers_loaded": 64,
+    "gate_layer_counts": [
+      16,
+      32,
+      48,
+      56,
+      60,
+      64
+    ],
+    "max_tokens": 32768,
+    "kv_dtype": "bf16",
+    "lazy_embedding_rows_touched": 1,
+    "optional_vision_loaded": false,
+    "optional_mtp_loaded": false,
+    "nvfp4_mlp_layers": 56,
+    "fp8_mlp_layers": 8
+  },
+  "loading": {
+    "load_and_validate_seconds": 11.947112399968319,
+    "total_load_benchmark_and_teardown_seconds": 17.88954530004412,
+    "resident_checkpoint_native_payload_bytes": 19103683968,
+    "complete_text_compute_payload_bytes": 19103683968
+  },
+  "memory": {
+    "baseline_available_physical_bytes": 41180143616,
+    "before_release_available_physical_bytes": 19594694656,
+    "after_release_available_physical_bytes": 41265946624,
+    "recovered_on_release_bytes": 21671251968,
+    "reported_opencl_global_budget_bytes": 25563234304
+  },
+  "gates": [
+    {
+      "layers_resident": 16,
+      "last_layer": 15,
+      "checkpoint_native_payload_bytes": 5495726736,
+      "available_physical_bytes": 27877097472,
+      "available_delta_bytes": -13303046144,
+      "last_layer_composition_maximum_absolute_error": 0.0,
+      "last_layer_mlp_format": "nvfp4"
+    },
+    {
+      "layers_resident": 32,
+      "last_layer": 31,
+      "checkpoint_native_payload_bytes": 9719548192,
+      "available_physical_bytes": 19310682112,
+      "available_delta_bytes": -21869461504,
+      "last_layer_composition_maximum_absolute_error": 0.0,
+      "last_layer_mlp_format": "nvfp4"
+    },
+    {
+      "layers_resident": 48,
+      "last_layer": 47,
+      "checkpoint_native_payload_bytes": 13943369648,
+      "available_physical_bytes": 10762674176,
+      "available_delta_bytes": -30417469440,
+      "last_layer_composition_maximum_absolute_error": 0.0,
+      "last_layer_mlp_format": "nvfp4"
+    },
+    {
+      "layers_resident": 56,
+      "last_layer": 55,
+      "checkpoint_native_payload_bytes": 16055280376,
+      "available_physical_bytes": 6487040000,
+      "available_delta_bytes": -34693103616,
+      "last_layer_composition_maximum_absolute_error": 0.0,
+      "last_layer_mlp_format": "nvfp4"
+    },
+    {
+      "layers_resident": 60,
+      "last_layer": 59,
+      "checkpoint_native_payload_bytes": 17579482172,
+      "available_physical_bytes": 3404980224,
+      "available_delta_bytes": -37775163392,
+      "last_layer_composition_maximum_absolute_error": 0.0,
+      "last_layer_mlp_format": "fp8"
+    },
+    {
+      "layers_resident": 64,
+      "last_layer": 63,
+      "checkpoint_native_payload_bytes": 19103683968,
+      "available_physical_bytes": 465264640,
+      "available_delta_bytes": -40714878976,
+      "last_layer_composition_maximum_absolute_error": 0.0,
+      "last_layer_mlp_format": "fp8"
+    }
+  ],
+  "full_token": {
+    "input_token_id": 248044,
+    "greedy_output_token_id": 17,
+    "queued_kernel_ms": {
+      "median": 511.4572,
+      "p10": 510.04394,
+      "p90": 516.87814,
+      "minimum": 509.5355,
+      "maximum": 518.2993
+    },
+    "queued_wall_ms": {
+      "median": 519.0499,
+      "p10": 515.9524,
+      "p90": 523.04834,
+      "minimum": 515.3002,
+      "maximum": 524.3931
+    },
+    "wall_tokens_per_second": 1.9265970381653095,
+    "first_queued_kernel_ms": 512.602,
+    "first_queued_wall_ms": 520.2664,
+    "layer_synchronized_kernel_ms": 503.3452,
+    "layer_synchronized_wall_ms": 566.1074,
+    "maximum_absolute_error_vs_layer_synchronized_oracle": 0.0,
+    "finite_logits": true
+  },
+  "correctness": {
+    "passed": true,
+    "gates_validated": 6,
+    "maximum_gate_layer_error": 0.0,
+    "complete_text_payload_accounted": true,
+    "full_token_executed": true,
+    "explicit_completion_marker": true
+  },
+  "limitations": [
+    "one request and one decoded token; sustained generation is not measured",
+    "greedy argmax is performed after downloading full logits",
+    "available physical memory is system-wide, not an OpenCL allocator counter",
+    "vision and MTP tensors are intentionally excluded from the coding endpoint"
+  ]
+}

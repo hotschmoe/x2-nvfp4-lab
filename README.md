@@ -44,6 +44,9 @@ Current highlights on an Adreno X2-90:
 - With the official tokenizer/chat template, a 30-token coding prompt produces
   a complete typed Python function and stops on `<|im_end|>` after 183 tokens:
   **13.86 prefill tok/s / 11.75 decode tok/s**, exact on full replay.
+- The dense 27B model now fits and executes too: all 64 layers, its mixed 56
+  NVFP4 + 8 FP8 MLP policy, 32K BF16 KV, and the full FP8 head produce a real
+  checkpoint token at **1.923 tok/s**, again with exact queued composition.
 - Independent CPU/GPU tensor oracles and isolated-process accelerator gates.
 
 Start with [CAMPAIGN_BANDWIDTH_FIRST.md](CAMPAIGN_BANDWIDTH_FIRST.md) and
