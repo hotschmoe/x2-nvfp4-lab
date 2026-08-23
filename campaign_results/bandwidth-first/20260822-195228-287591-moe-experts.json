@@ -1,0 +1,148 @@
+{
+  "campaign": "bandwidth-first",
+  "schema_version": 1,
+  "timestamp": "2026-08-22T19:52:28-07:00",
+  "hardware": {
+    "system_model": "ASUS Zenbook A16 UX3607OA",
+    "gpu": "Qualcomm(R) Adreno(TM) X2-90 GPU"
+  },
+  "software": {
+    "command": [
+      "native_nvfp4/bench_moe_experts.py",
+      "--layer",
+      "0",
+      "--experts",
+      "0,1,2,3,4,5,6,7",
+      "--warmups",
+      "5",
+      "--samples",
+      "30"
+    ]
+  },
+  "environment": {
+    "power_source": "AC",
+    "battery_percent": 100,
+    "thermal_regime": "warm-burst"
+  },
+  "workload": {
+    "operation": "qwen35_moe_routed_experts",
+    "format": "nvfp4",
+    "layer": 0,
+    "expert_ids": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ],
+    "rows": 0,
+    "cols": 0,
+    "vectors": 1,
+    "logical_payload_bytes": 14155776
+  },
+  "timing": {
+    "warmups": 5,
+    "samples": 30,
+    "kernel_ms": {
+      "median": 0.6476500000000001,
+      "p10": 0.64516,
+      "p90": 0.65371,
+      "minimum": 0.6383,
+      "maximum": 0.6571
+    },
+    "wall_ms": {
+      "median": 0.77415,
+      "p10": 0.7682599999999999,
+      "p90": 0.8257800000000001,
+      "minimum": 0.7667,
+      "maximum": 0.9106
+    },
+    "per_expert_kernel_ms": 0.08095625000000001
+  },
+  "bandwidth": {
+    "logical_gbs": 21.85713888674438,
+    "matched_island_ceiling_gbs": 129.0,
+    "island_utilization": 0.1694351851685611,
+    "physical_gbs": null
+  },
+  "correctness": {
+    "passed": true,
+    "first_expert_max_abs_error": 4.656612873077393e-10,
+    "finite_outputs": true,
+    "explicit_completion_marker": true
+  },
+  "limitations": [
+    "router top-k selection is supplied by expert_ids",
+    "router weights and expert-output reduction are not included",
+    "expert kernels execute serially on one in-order queue"
+  ],
+  "samples": {
+    "kernel_ms": [
+      0.6421,
+      0.646,
+      0.6473,
+      0.647,
+      0.6457,
+      0.6493,
+      0.65,
+      0.6467,
+      0.6472,
+      0.6521,
+      0.6464,
+      0.6515,
+      0.6501,
+      0.6498,
+      0.6484,
+      0.646,
+      0.6475,
+      0.6521,
+      0.6571,
+      0.6458,
+      0.6502,
+      0.6383,
+      0.6478,
+      0.6418,
+      0.6455,
+      0.6472,
+      0.6538,
+      0.6537,
+      0.6489,
+      0.657
+    ],
+    "wall_ms": [
+      0.7677,
+      0.7696,
+      0.7738,
+      0.7683,
+      0.9106,
+      0.7896,
+      0.7719,
+      0.8255,
+      0.7745,
+      0.7733,
+      0.7728,
+      0.7765,
+      0.7711,
+      0.774,
+      0.7701,
+      0.7806,
+      0.7745,
+      0.7729,
+      0.7852,
+      0.7679,
+      0.7743,
+      0.8283,
+      0.7829,
+      0.7667,
+      0.7731,
+      0.7709,
+      0.788,
+      0.8493,
+      0.7774,
+      0.7857
+    ]
+  }
+}

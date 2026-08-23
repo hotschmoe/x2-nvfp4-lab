@@ -269,3 +269,38 @@ Paged continuous-batch results with shared SVM:
 Relative to the prior copied-buffer scheduler, batch-one throughput improves
 68.5% and batch-four aggregate throughput improves 38.2%. Both cells matched
 independent per-request contiguous-cache oracles exactly.
+
+## Qwen3.5-MoE 35B expert micrograph
+
+`Ornith-1.5-35B-A3B-NVFP4` has 40 decoder layers, hidden width 2048,
+256 experts per layer, top-8 routing, and expert intermediate width 512. Its
+expert tensors use the same packed E2M1 and E4M3-block representation under the
+names `weight`, `weight_scale`, and `weight_scale_2`. The last value is a
+multiplier, so the native runtime receives its reciprocal as the equivalent
+global divisor.
+
+Eight real layer-0 experts were loaded into shared SVM and executed as serial
+gate/up, SiLU-multiply, and down graphs on one in-order queue:
+
+| Metric | Top-8 result |
+|---|---:|
+| Active native payload | 14,155,776 bytes |
+| Median kernel time | 0.6477 ms |
+| p10-p90 kernel time | 0.6452-0.6537 ms |
+| Median queued wall | 0.7742 ms |
+| Per-expert kernel time | 0.0810 ms |
+| Logical native bandwidth | 21.86 GB/s |
+| Expert-0 maximum absolute error | `4.66e-10` |
+
+Repeating only this top-8 expert work across 40 layers is a planning estimate of
+25.9 ms, or 38.6 tokens/s. It deliberately excludes router selection and
+weights, shared-expert execution/gating, expert-output reduction, attention,
+normalization, LM head, MTP, and serving overhead. The immediate result proves
+that the checkpoint's sparse expert shapes work natively; it is not an
+end-to-end MoE throughput claim.
+
+Artifacts:
+
+- `native_nvfp4/bench_moe_experts.py`
+- `campaign_results/bandwidth-first/20260822-195228-287591-moe-experts.json`
+- `logs/20260822-195227-227.stdout.log`

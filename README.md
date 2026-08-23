@@ -16,6 +16,7 @@ Current highlights on an Adreno X2-90:
 - Exact 17408x5120 GEMV: 2.326 ms copied vs 1.465 ms shared SVM (1.59x).
 - Exact four-layer Qwen3.5 cadence: 30.151 ms kernel / 30.465 ms queued wall.
 - Paged batch-one: 31.98 request-tokens/s; batch-four: 38.11 aggregate.
+- Real 35B MoE top-8 expert micrograph: 0.648 ms kernel per layer.
 - Independent CPU/GPU tensor oracles and isolated-process accelerator gates.
 
 Start with [CAMPAIGN_BANDWIDTH_FIRST.md](CAMPAIGN_BANDWIDTH_FIRST.md) and

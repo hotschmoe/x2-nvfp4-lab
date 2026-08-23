@@ -201,6 +201,14 @@ with exact request-state oracle matches. SVM is now the plugin default, with
 `VLLM_NVFP4_OPENCL_SVM=0` and automatic allocation-failure fallback preserving
 the conventional path.
 
+The same runtime now covers the sparse 35B checkpoint's native expert shapes.
+One routed top-8 layer consumes 14.16 MB of native payload and takes 0.6477 ms
+kernel time across eight real experts. Expert-0 oracle error is `4.66e-10`.
+This makes expert execution promising enough to pursue, but the next MoE gate
+must add native router selection, the always-on shared expert, weighted output
+reduction, and a staged weight-residency policy before claiming layer or model
+throughput.
+
 ## First decoder benchmarks
 
 Direct row-scaled FP8 kernels now accompany NVFP4 in the persistent runtime. A
