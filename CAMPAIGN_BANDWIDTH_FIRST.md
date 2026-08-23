@@ -551,6 +551,14 @@ median is 0.8230 ms kernel / 1.2767 ms wall with exact selected IDs and
 `1.16e-9` final-output maximum error. Device-resident selection/indirect
 dispatch, attention, and full-model expert residency remain open.
 
+A subsequent device-bank treatment removes the selection boundary. All 256
+routed experts and the shared expert occupy one 454,754,304-byte contiguous SVM
+bank per layer; GPU top-8 output directly indexes row-tiled bank kernels. The
+30-sample layer result is 0.7563 ms kernel / 0.9231 ms wall with `1.16e-9`
+maximum error, an 8.1% kernel and 27.7% wall improvement over host dispatch.
+The initial untiled bank kernel regressed to 1.4037 ms and was replaced after
+the controlled result confirmed activation staging was missing.
+
 An explicit `uchar8` packed-load treatment was also tested. Qualcomm's compiler
 rejected dynamic vector indexing; materializing the vector through a private
 array compiled but regressed the exact SVM kernel from about 1.47 ms to 12.60 ms.
@@ -564,6 +572,7 @@ Reproduction entry points:
 - `native_nvfp4/bench_svm_matrix.py`
 - `native_nvfp4/bench_moe_experts.py`
 - `native_nvfp4/bench_moe_routed_layer.py`
+- `native_nvfp4/bench_moe_device_bank.py`
 - `campaign_results/bandwidth-first/*.json`
 - `logs/20260822-194606-767.stdout.log` (complete SVM MLP)
 - `logs/20260822-194623-106.stdout.log` (complete SVM decoder layer)

@@ -6,6 +6,7 @@
 # Upstream working trees (maintained as their own repositories)
 /llama.cpp/
 /vllm/
+/upstream/
 
 # Accelerator logs and local research downloads
 /logs/

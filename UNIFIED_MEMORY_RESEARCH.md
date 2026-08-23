@@ -346,6 +346,21 @@ thin vLLM lifecycle adapter follows the same separation: keep the model/hardware
 hot path compiled and resident, while retaining a mature external scheduler and
 OpenAI-compatible API until measurements justify replacing more of it.
 
+The source audit found four concrete decode mechanisms worth transferring:
+
+1. router top-k stays on device and writes IDs/weights consumed by later kernels;
+2. device pointer tables let one kernel select any resident expert;
+3. the shared expert is represented as an additional dispatch slot;
+4. gate/up and SiLU/down work is grouped so routing does not become dozens of
+   per-expert launches.
+
+CUDA device-pointer tables are not a portable OpenCL assumption. The implemented
+equivalent is a contiguous per-layer SVM bank: selected IDs produce byte offsets
+inside six packed/scale arrays, and shared slot 8 maps to bank expert 256. This
+reduced the routed layer from approximately 47 launches and two materialization
+boundaries to seven launches and one. The measured result is 0.7563 ms kernel /
+0.9231 ms wall, 27.7% lower wall time than host dispatch.
+
 ### llama.cpp: a useful deployment and MTP reference
 
 NVIDIA's Spark llama.cpp recipe builds directly for GB10's `sm_121` CUDA target,
@@ -534,10 +549,9 @@ The earlier crashes make benchmark containment part of the architecture:
 
 Prioritized next questions, including work not yet performed:
 
-1. **Device-resident MoE dispatch.** Implement stable 256-way softmax/top-8,
-   selected-weight renormalization, and indirect expert dispatch without the
-   current host readback; compare a fused kernel with a small radix/bitonic
-   selection pipeline.
+1. **Further MoE fusion.** Device-resident 256-way top-8 and contiguous-bank
+   dispatch now pass. Next compare fused gate/up, SiLU/down, shared-slot, and
+   weighted-reduction variants, and expose per-kernel component timing.
 2. **Atlas kernel and graph structure.** Audit its open-source Qwen3.5/GB10 MoE,
    recurrent-layer, paged-KV, CUDA-graph, and MTP paths for reusable scheduling
    patterns, while separating CUDA/SM121-only techniques from portable ones.
@@ -568,6 +582,13 @@ Prioritized next questions, including work not yet performed:
    and obtain Qualcomm compiler/occupancy/memory-counter evidence so the gap
    between 34.22 GB/s useful NVFP4 delivery and the 129 GB/s raw ceiling can be
    attributed rather than guessed.
+
+The immediate memory question is now sharper: one full expert bank is 454.75 MB
+and 40 banks are 16.94 GiB. The complete safetensors checkpoint is 21.81 GiB,
+while OpenCL reports 23.81 GiB of global memory. That leaves roughly 2 GiB for
+KV, recurrent state, embeddings, LM head, activations, scratch, driver behavior,
+and safety margin. Do not jump directly to 40 banks; use staged cumulative
+residency and retain layer streaming/cache as a policy arm.
 
 ## Research sources
 

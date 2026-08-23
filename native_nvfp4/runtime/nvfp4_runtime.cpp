@@ -167,6 +167,11 @@ struct nvfp4_runtime {
     cl_kernel rmsnorm = nullptr;
     cl_kernel f32_gemv = nullptr;
     cl_kernel bf16_gemv = nullptr;
+    cl_kernel moe_top8 = nullptr;
+    cl_kernel moe_bank_gate_up = nullptr;
+    cl_kernel moe_bank_silu = nullptr;
+    cl_kernel moe_bank_down = nullptr;
+    cl_kernel moe_bank_reduce = nullptr;
     cl_kernel qwen35_prepare_gated_delta = nullptr;
     cl_kernel rmsnorm_silu_gate = nullptr;
     cl_kernel qwen35_full_attention_prepare = nullptr;
@@ -225,6 +230,11 @@ struct nvfp4_runtime {
         if (qwen35_full_attention_prepare) clReleaseKernel(qwen35_full_attention_prepare);
         if (rmsnorm_silu_gate) clReleaseKernel(rmsnorm_silu_gate);
         if (qwen35_prepare_gated_delta) clReleaseKernel(qwen35_prepare_gated_delta);
+        if (moe_bank_reduce) clReleaseKernel(moe_bank_reduce);
+        if (moe_bank_down) clReleaseKernel(moe_bank_down);
+        if (moe_bank_silu) clReleaseKernel(moe_bank_silu);
+        if (moe_bank_gate_up) clReleaseKernel(moe_bank_gate_up);
+        if (moe_top8) clReleaseKernel(moe_top8);
         if (bf16_gemv) clReleaseKernel(bf16_gemv);
         if (f32_gemv) clReleaseKernel(f32_gemv);
         if (rmsnorm) clReleaseKernel(rmsnorm);
@@ -291,6 +301,59 @@ struct nvfp4_matrix {
         if (packed_svm && runtime && runtime->context) {
             clSVMFree(runtime->context, packed_svm);
         }
+    }
+};
+
+struct nvfp4_svm_view {
+    nvfp4_runtime * runtime = nullptr;
+    void * pointer = nullptr;
+    cl_mem buffer = nullptr;
+    size_t bytes = 0;
+
+    ~nvfp4_svm_view() {
+        if (buffer) clReleaseMemObject(buffer);
+        if (pointer && runtime && runtime->context) {
+            clSVMFree(runtime->context, pointer);
+        }
+    }
+};
+
+struct nvfp4_moe_bank {
+    nvfp4_runtime * runtime = nullptr;
+    int experts = 0;
+    int hidden = 0;
+    int intermediate = 0;
+    nvfp4_svm_view gate_packed;
+    nvfp4_svm_view gate_scales;
+    nvfp4_svm_view up_packed;
+    nvfp4_svm_view up_scales;
+    nvfp4_svm_view down_packed;
+    nvfp4_svm_view down_scales;
+    nvfp4_svm_view inverse_scales;
+    cl_mem router = nullptr;
+    cl_mem shared_gate = nullptr;
+    cl_mem router_logits = nullptr;
+    cl_mem shared_gate_logit = nullptr;
+    cl_mem expert_ids = nullptr;
+    cl_mem expert_weights = nullptr;
+    cl_mem gate_output = nullptr;
+    cl_mem up_output = nullptr;
+    cl_mem activation = nullptr;
+    cl_mem expert_outputs = nullptr;
+    std::vector<uint8_t> uploaded;
+    size_t uploaded_projections = 0;
+
+    ~nvfp4_moe_bank() {
+        if (expert_outputs) clReleaseMemObject(expert_outputs);
+        if (activation) clReleaseMemObject(activation);
+        if (up_output) clReleaseMemObject(up_output);
+        if (gate_output) clReleaseMemObject(gate_output);
+        if (expert_weights) clReleaseMemObject(expert_weights);
+        if (expert_ids) clReleaseMemObject(expert_ids);
+        if (shared_gate_logit) clReleaseMemObject(shared_gate_logit);
+        if (router_logits) clReleaseMemObject(router_logits);
+        if (shared_gate) clReleaseMemObject(shared_gate);
+        if (router) clReleaseMemObject(router);
     }
 };
 
@@ -471,6 +534,49 @@ uint64_t event_duration_ns(const event_owner & event) {
                                      sizeof(ended), &ended, nullptr),
              "clGetEventProfilingInfo(end)");
     return static_cast<uint64_t>(ended - started);
+}
+
+void create_svm_view(
+    nvfp4_runtime * runtime,
+    size_t bytes,
+    nvfp4_svm_view * output) {
+    if (!runtime || !output || bytes == 0) {
+        throw std::invalid_argument("invalid SVM view allocation");
+    }
+    const auto capabilities = device_value<cl_device_svm_capabilities>(
+        runtime->device, CL_DEVICE_SVM_CAPABILITIES);
+    if ((capabilities & CL_DEVICE_SVM_FINE_GRAIN_BUFFER) == 0) {
+        throw std::runtime_error("device does not support fine-grained SVM buffers");
+    }
+    const size_t max_allocation = device_value<cl_ulong>(
+        runtime->device, CL_DEVICE_MAX_MEM_ALLOC_SIZE);
+    if (bytes > max_allocation) {
+        throw std::runtime_error("SVM view exceeds CL_DEVICE_MAX_MEM_ALLOC_SIZE");
+    }
+    output->runtime = runtime;
+    output->bytes = bytes;
+    output->pointer = clSVMAlloc(
+        runtime->context, CL_MEM_READ_ONLY | CL_MEM_SVM_FINE_GRAIN_BUFFER,
+        bytes, 0);
+    if (!output->pointer) {
+        throw std::runtime_error("clSVMAlloc(MoE bank) returned null");
+    }
+    cl_int status = CL_SUCCESS;
+    output->buffer = clCreateBuffer(
+        runtime->context, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
+        bytes, output->pointer, &status);
+    check_cl(status, "clCreateBuffer(MoE_bank_SVM_USE_HOST_PTR)");
+}
+
+cl_mem create_buffer(
+    nvfp4_runtime * runtime,
+    cl_mem_flags flags,
+    size_t bytes,
+    void * host_pointer = nullptr) {
+    cl_int status = CL_SUCCESS;
+    cl_mem buffer = clCreateBuffer(runtime->context, flags, bytes, host_pointer, &status);
+    check_cl(status, "clCreateBuffer(MoE_bank_scratch)");
+    return buffer;
 }
 
 void enqueue_nvfp4_linear(
@@ -733,6 +839,11 @@ extern "C" NVFP4_API nvfp4_status nvfp4_runtime_create(
         holder->rmsnorm = make_kernel("rmsnorm_f32");
         holder->f32_gemv = make_kernel("f32_gemv_subgroup");
         holder->bf16_gemv = make_kernel("bf16_gemv_subgroup");
+        holder->moe_top8 = make_kernel("moe_top8_route_f32");
+        holder->moe_bank_gate_up = make_kernel("moe_bank_gate_up_f32");
+        holder->moe_bank_silu = make_kernel("moe_bank_silu_mul_f32");
+        holder->moe_bank_down = make_kernel("moe_bank_down_f32");
+        holder->moe_bank_reduce = make_kernel("moe_bank_reduce_f32");
         holder->qwen35_prepare_gated_delta = make_kernel(
             "qwen35_prepare_gated_delta_decode_f32");
         holder->rmsnorm_silu_gate = make_kernel("rmsnorm_silu_gate_f32");
@@ -1240,6 +1351,311 @@ extern "C" NVFP4_API nvfp4_status nvfp4_matrix_upload_shared_svm(
 extern "C" NVFP4_API int nvfp4_matrix_is_shared_svm(
     const nvfp4_matrix * matrix) {
     return matrix && matrix->packed_svm && matrix->scales_svm ? 1 : 0;
+}
+
+extern "C" NVFP4_API nvfp4_status nvfp4_moe_bank_create(
+    nvfp4_runtime * runtime,
+    const uint16_t * router_bf16,
+    size_t router_bytes,
+    const uint16_t * shared_gate_bf16,
+    size_t shared_gate_bytes,
+    int experts,
+    int hidden,
+    int intermediate,
+    nvfp4_moe_bank ** out_bank) {
+    if (!runtime || !router_bf16 || !shared_gate_bf16 || !out_bank ||
+        experts < 8 || experts > 256 || hidden <= 0 || intermediate <= 0 ||
+        hidden % 16 != 0 || intermediate % 16 != 0 ||
+        router_bytes != static_cast<size_t>(experts)*hidden*sizeof(uint16_t) ||
+        shared_gate_bytes != static_cast<size_t>(hidden)*sizeof(uint16_t)) {
+        return fail_invalid("invalid MoE bank creation arguments");
+    }
+    *out_bank = nullptr;
+    try {
+        auto holder = std::make_unique<nvfp4_moe_bank>();
+        holder->runtime = runtime;
+        holder->experts = experts;
+        holder->hidden = hidden;
+        holder->intermediate = intermediate;
+        const size_t slots = static_cast<size_t>(experts) + 1;
+        if (static_cast<size_t>(hidden) >
+            std::numeric_limits<size_t>::max()/static_cast<size_t>(intermediate)/slots) {
+            throw std::overflow_error("MoE bank dimensions overflow size_t");
+        }
+        const size_t elements = slots*static_cast<size_t>(hidden)*intermediate;
+        const size_t packed_bytes = elements/2;
+        const size_t scale_bytes = elements/16;
+        create_svm_view(runtime, packed_bytes, &holder->gate_packed);
+        create_svm_view(runtime, scale_bytes, &holder->gate_scales);
+        create_svm_view(runtime, packed_bytes, &holder->up_packed);
+        create_svm_view(runtime, scale_bytes, &holder->up_scales);
+        create_svm_view(runtime, packed_bytes, &holder->down_packed);
+        create_svm_view(runtime, scale_bytes, &holder->down_scales);
+        create_svm_view(runtime, slots*3*sizeof(float), &holder->inverse_scales);
+        std::memset(holder->inverse_scales.pointer, 0,
+                    holder->inverse_scales.bytes);
+        holder->uploaded.resize(slots*3, 0);
+
+        holder->router = create_buffer(
+            runtime, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+            router_bytes, const_cast<uint16_t *>(router_bf16));
+        holder->shared_gate = create_buffer(
+            runtime, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+            shared_gate_bytes, const_cast<uint16_t *>(shared_gate_bf16));
+        holder->router_logits = create_buffer(
+            runtime, CL_MEM_READ_WRITE,
+            static_cast<size_t>(experts)*sizeof(float));
+        holder->shared_gate_logit = create_buffer(
+            runtime, CL_MEM_READ_WRITE, sizeof(float));
+        holder->expert_ids = create_buffer(
+            runtime, CL_MEM_READ_WRITE, 9*sizeof(cl_uint));
+        holder->expert_weights = create_buffer(
+            runtime, CL_MEM_READ_WRITE, 9*sizeof(float));
+        const size_t intermediate_scratch = 9*static_cast<size_t>(intermediate)*sizeof(float);
+        holder->gate_output = create_buffer(
+            runtime, CL_MEM_READ_WRITE, intermediate_scratch);
+        holder->up_output = create_buffer(
+            runtime, CL_MEM_READ_WRITE, intermediate_scratch);
+        holder->activation = create_buffer(
+            runtime, CL_MEM_READ_WRITE, intermediate_scratch);
+        holder->expert_outputs = create_buffer(
+            runtime, CL_MEM_READ_WRITE,
+            9*static_cast<size_t>(hidden)*sizeof(float));
+        g_last_error.clear();
+        *out_bank = holder.release();
+        return NVFP4_STATUS_OK;
+    } catch (const opencl_error & error) {
+        return fail(NVFP4_STATUS_OPENCL_ERROR, error);
+    } catch (const std::exception & error) {
+        return fail(NVFP4_STATUS_INTERNAL_ERROR, error);
+    }
+}
+
+extern "C" NVFP4_API nvfp4_status nvfp4_moe_bank_upload_projection(
+    nvfp4_moe_bank * bank,
+    int expert,
+    int projection,
+    const uint8_t * packed,
+    size_t packed_bytes,
+    const uint8_t * scales_e4m3,
+    size_t scale_bytes,
+    float weight_global_scale) {
+    if (!bank || !bank->runtime || !packed || !scales_e4m3 ||
+        expert < 0 || expert > bank->experts || projection < 0 || projection > 2 ||
+        weight_global_scale == 0.0f) {
+        return fail_invalid("invalid MoE bank projection upload arguments");
+    }
+    const size_t per_packed =
+        static_cast<size_t>(bank->hidden)*bank->intermediate/2;
+    const size_t per_scales =
+        static_cast<size_t>(bank->hidden)*bank->intermediate/16;
+    if (packed_bytes != per_packed || scale_bytes != per_scales) {
+        return fail_invalid("MoE bank projection byte counts do not match dimensions");
+    }
+    try {
+        std::lock_guard<std::mutex> lock(bank->runtime->queue_mutex);
+        check_cl(clFinish(bank->runtime->queue), "clFinish(MoE_bank_upload)");
+        nvfp4_svm_view * packed_view = projection == 0
+            ? &bank->gate_packed
+            : (projection == 1 ? &bank->up_packed : &bank->down_packed);
+        nvfp4_svm_view * scale_view = projection == 0
+            ? &bank->gate_scales
+            : (projection == 1 ? &bank->up_scales : &bank->down_scales);
+        std::memcpy(static_cast<uint8_t *>(packed_view->pointer) +
+                        static_cast<size_t>(expert)*per_packed,
+                    packed, per_packed);
+        std::memcpy(static_cast<uint8_t *>(scale_view->pointer) +
+                        static_cast<size_t>(expert)*per_scales,
+                    scales_e4m3, per_scales);
+        const size_t slots = static_cast<size_t>(bank->experts) + 1;
+        static_cast<float *>(bank->inverse_scales.pointer)[
+            static_cast<size_t>(projection)*slots + expert] =
+                1.0f/weight_global_scale;
+        const size_t uploaded_index =
+            static_cast<size_t>(projection)*slots + expert;
+        if (!bank->uploaded[uploaded_index]) {
+            bank->uploaded[uploaded_index] = 1;
+            ++bank->uploaded_projections;
+        }
+        g_last_error.clear();
+        return NVFP4_STATUS_OK;
+    } catch (const opencl_error & error) {
+        return fail(NVFP4_STATUS_OPENCL_ERROR, error);
+    } catch (const std::exception & error) {
+        return fail(NVFP4_STATUS_INTERNAL_ERROR, error);
+    }
+}
+
+extern "C" NVFP4_API nvfp4_status nvfp4_moe_bank_decode_device_enqueue_f32(
+    nvfp4_moe_bank * bank,
+    const nvfp4_buffer * x,
+    nvfp4_buffer * dst) {
+    if (!bank || !bank->runtime || !x || x->runtime != bank->runtime ||
+        !dst || dst->runtime != bank->runtime ||
+        x->bytes < static_cast<size_t>(bank->hidden)*sizeof(float) ||
+        dst->bytes < static_cast<size_t>(bank->hidden)*sizeof(float)) {
+        return fail_invalid("invalid MoE bank decode buffers");
+    }
+    const size_t slots = static_cast<size_t>(bank->experts) + 1;
+    if (bank->uploaded_projections != slots*3) {
+        return fail_invalid("MoE bank decode requires every routed and shared projection");
+    }
+    try {
+        std::lock_guard<std::mutex> lock(bank->runtime->queue_mutex);
+        auto enqueue = [&](cl_kernel kernel, cl_uint dimensions,
+                           const size_t * global, const size_t * local,
+                           const char * operation) {
+            event_owner event;
+            check_cl(clEnqueueNDRangeKernel(bank->runtime->queue, kernel,
+                                            dimensions, nullptr, global, local,
+                                            0, nullptr, &event.value), operation);
+            bank->runtime->pending_profile_events.push_back(event.value);
+            event.value = nullptr;
+        };
+        cl_uint arg = 0;
+        cl_uint experts = static_cast<cl_uint>(bank->experts);
+        cl_uint hidden = static_cast<cl_uint>(bank->hidden);
+        cl_uint intermediate = static_cast<cl_uint>(bank->intermediate);
+
+        check_cl(clSetKernelArg(bank->runtime->bf16_gemv, arg++, sizeof(cl_mem),
+                                &bank->router), "clSetKernelArg(moe_router_weights)");
+        check_cl(clSetKernelArg(bank->runtime->bf16_gemv, arg++, sizeof(cl_mem),
+                                &x->data), "clSetKernelArg(moe_router_x)");
+        check_cl(clSetKernelArg(bank->runtime->bf16_gemv, arg++, sizeof(cl_mem),
+                                &bank->router_logits), "clSetKernelArg(moe_router_dst)");
+        check_cl(clSetKernelArg(bank->runtime->bf16_gemv, arg++, sizeof(cl_uint),
+                                &experts), "clSetKernelArg(moe_router_rows)");
+        check_cl(clSetKernelArg(bank->runtime->bf16_gemv, arg++, sizeof(cl_uint),
+                                &hidden), "clSetKernelArg(moe_router_cols)");
+        size_t local1 = 64;
+        size_t global1 = static_cast<size_t>(experts)*local1;
+        enqueue(bank->runtime->bf16_gemv, 1, &global1, &local1,
+                "clEnqueueNDRangeKernel(moe_router)");
+
+        arg = 0;
+        cl_uint one = 1;
+        check_cl(clSetKernelArg(bank->runtime->bf16_gemv, arg++, sizeof(cl_mem),
+                                &bank->shared_gate), "clSetKernelArg(moe_shared_gate_weights)");
+        check_cl(clSetKernelArg(bank->runtime->bf16_gemv, arg++, sizeof(cl_mem),
+                                &x->data), "clSetKernelArg(moe_shared_gate_x)");
+        check_cl(clSetKernelArg(bank->runtime->bf16_gemv, arg++, sizeof(cl_mem),
+                                &bank->shared_gate_logit), "clSetKernelArg(moe_shared_gate_dst)");
+        check_cl(clSetKernelArg(bank->runtime->bf16_gemv, arg++, sizeof(cl_uint),
+                                &one), "clSetKernelArg(moe_shared_gate_rows)");
+        check_cl(clSetKernelArg(bank->runtime->bf16_gemv, arg++, sizeof(cl_uint),
+                                &hidden), "clSetKernelArg(moe_shared_gate_cols)");
+        global1 = local1;
+        enqueue(bank->runtime->bf16_gemv, 1, &global1, &local1,
+                "clEnqueueNDRangeKernel(moe_shared_gate)");
+
+        arg = 0;
+        check_cl(clSetKernelArg(bank->runtime->moe_top8, arg++, sizeof(cl_mem),
+                                &bank->router_logits), "clSetKernelArg(moe_top8_logits)");
+        check_cl(clSetKernelArg(bank->runtime->moe_top8, arg++, sizeof(cl_mem),
+                                &bank->shared_gate_logit), "clSetKernelArg(moe_top8_shared)");
+        check_cl(clSetKernelArg(bank->runtime->moe_top8, arg++, sizeof(cl_mem),
+                                &bank->expert_ids), "clSetKernelArg(moe_top8_ids)");
+        check_cl(clSetKernelArg(bank->runtime->moe_top8, arg++, sizeof(cl_mem),
+                                &bank->expert_weights), "clSetKernelArg(moe_top8_weights)");
+        check_cl(clSetKernelArg(bank->runtime->moe_top8, arg++, sizeof(cl_uint),
+                                &experts), "clSetKernelArg(moe_top8_experts)");
+        local1 = 256;
+        global1 = 256;
+        enqueue(bank->runtime->moe_top8, 1, &global1, &local1,
+                "clEnqueueNDRangeKernel(moe_top8)");
+
+        arg = 0;
+        cl_mem gate_up_args[] = {
+            bank->gate_packed.buffer, bank->gate_scales.buffer,
+            bank->up_packed.buffer, bank->up_scales.buffer,
+            bank->inverse_scales.buffer, x->data, bank->expert_ids,
+            bank->gate_output, bank->up_output,
+        };
+        for (cl_mem value : gate_up_args) {
+            check_cl(clSetKernelArg(bank->runtime->moe_bank_gate_up, arg++,
+                                    sizeof(cl_mem), &value),
+                     "clSetKernelArg(moe_bank_gate_up_buffer)");
+        }
+        check_cl(clSetKernelArg(bank->runtime->moe_bank_gate_up, arg++, sizeof(cl_uint),
+                                &experts), "clSetKernelArg(moe_bank_gate_up_experts)");
+        check_cl(clSetKernelArg(bank->runtime->moe_bank_gate_up, arg++, sizeof(cl_uint),
+                                &hidden), "clSetKernelArg(moe_bank_gate_up_hidden)");
+        check_cl(clSetKernelArg(bank->runtime->moe_bank_gate_up, arg++, sizeof(cl_uint),
+                                &intermediate), "clSetKernelArg(moe_bank_gate_up_intermediate)");
+        const size_t local3[3] = {64*4, 1, 1};
+        const size_t global3[3] = {
+            (static_cast<size_t>(intermediate) + 3)/4*(64*4), 9, 2,
+        };
+        enqueue(bank->runtime->moe_bank_gate_up, 3, global3, local3,
+                "clEnqueueNDRangeKernel(moe_bank_gate_up)");
+
+        arg = 0;
+        check_cl(clSetKernelArg(bank->runtime->moe_bank_silu, arg++, sizeof(cl_mem),
+                                &bank->gate_output), "clSetKernelArg(moe_bank_silu_gate)");
+        check_cl(clSetKernelArg(bank->runtime->moe_bank_silu, arg++, sizeof(cl_mem),
+                                &bank->up_output), "clSetKernelArg(moe_bank_silu_up)");
+        check_cl(clSetKernelArg(bank->runtime->moe_bank_silu, arg++, sizeof(cl_mem),
+                                &bank->activation), "clSetKernelArg(moe_bank_silu_dst)");
+        cl_uint activation_elements = 9*intermediate;
+        check_cl(clSetKernelArg(bank->runtime->moe_bank_silu, arg++, sizeof(cl_uint),
+                                &activation_elements), "clSetKernelArg(moe_bank_silu_elements)");
+        local1 = 256;
+        global1 = (static_cast<size_t>(activation_elements) + local1 - 1)/local1*local1;
+        enqueue(bank->runtime->moe_bank_silu, 1, &global1, &local1,
+                "clEnqueueNDRangeKernel(moe_bank_silu)");
+
+        arg = 0;
+        cl_mem down_args[] = {
+            bank->down_packed.buffer, bank->down_scales.buffer,
+            bank->inverse_scales.buffer, bank->activation, bank->expert_ids,
+            bank->expert_outputs,
+        };
+        for (cl_mem value : down_args) {
+            check_cl(clSetKernelArg(bank->runtime->moe_bank_down, arg++,
+                                    sizeof(cl_mem), &value),
+                     "clSetKernelArg(moe_bank_down_buffer)");
+        }
+        check_cl(clSetKernelArg(bank->runtime->moe_bank_down, arg++, sizeof(cl_uint),
+                                &experts), "clSetKernelArg(moe_bank_down_experts)");
+        check_cl(clSetKernelArg(bank->runtime->moe_bank_down, arg++, sizeof(cl_uint),
+                                &hidden), "clSetKernelArg(moe_bank_down_hidden)");
+        check_cl(clSetKernelArg(bank->runtime->moe_bank_down, arg++, sizeof(cl_uint),
+                                &intermediate), "clSetKernelArg(moe_bank_down_intermediate)");
+        const size_t local2[2] = {64*4, 1};
+        const size_t global2[2] = {
+            (static_cast<size_t>(hidden) + 3)/4*(64*4), 9,
+        };
+        enqueue(bank->runtime->moe_bank_down, 2, global2, local2,
+                "clEnqueueNDRangeKernel(moe_bank_down)");
+
+        arg = 0;
+        check_cl(clSetKernelArg(bank->runtime->moe_bank_reduce, arg++, sizeof(cl_mem),
+                                &bank->expert_outputs), "clSetKernelArg(moe_bank_reduce_outputs)");
+        check_cl(clSetKernelArg(bank->runtime->moe_bank_reduce, arg++, sizeof(cl_mem),
+                                &bank->expert_weights), "clSetKernelArg(moe_bank_reduce_weights)");
+        check_cl(clSetKernelArg(bank->runtime->moe_bank_reduce, arg++, sizeof(cl_mem),
+                                &dst->data), "clSetKernelArg(moe_bank_reduce_dst)");
+        check_cl(clSetKernelArg(bank->runtime->moe_bank_reduce, arg++, sizeof(cl_uint),
+                                &hidden), "clSetKernelArg(moe_bank_reduce_hidden)");
+        local1 = 256;
+        global1 = (static_cast<size_t>(hidden) + local1 - 1)/local1*local1;
+        enqueue(bank->runtime->moe_bank_reduce, 1, &global1, &local1,
+                "clEnqueueNDRangeKernel(moe_bank_reduce)");
+        g_last_error.clear();
+        return NVFP4_STATUS_OK;
+    } catch (const opencl_error & error) {
+        return fail(NVFP4_STATUS_OPENCL_ERROR, error);
+    } catch (const std::exception & error) {
+        return fail(NVFP4_STATUS_INTERNAL_ERROR, error);
+    }
+}
+
+extern "C" NVFP4_API void nvfp4_moe_bank_destroy(nvfp4_moe_bank * bank) {
+    if (bank && bank->runtime && bank->runtime->queue) {
+        std::lock_guard<std::mutex> lock(bank->runtime->queue_mutex);
+        clFinish(bank->runtime->queue);
+    }
+    delete bank;
 }
 
 extern "C" NVFP4_API nvfp4_status nvfp4_matrix_cpu_linear_f32(

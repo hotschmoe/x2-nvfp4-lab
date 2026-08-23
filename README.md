@@ -18,6 +18,8 @@ Current highlights on an Adreno X2-90:
 - Paged batch-one: 31.98 request-tokens/s; batch-four: 38.11 aggregate.
 - Real checkpoint-routed 35B MoE layer micrograph: 0.823 ms kernel / 1.277 ms
   wall, including BF16 router, shared expert, top-8 experts, and reduction.
+- Device-routed 256-expert SVM bank: 0.756 ms kernel / 0.923 ms wall with no
+  host routing boundary; one complete layer bank occupies 454.8 MB.
 - Independent CPU/GPU tensor oracles and isolated-process accelerator gates.
 
 Start with [CAMPAIGN_BANDWIDTH_FIRST.md](CAMPAIGN_BANDWIDTH_FIRST.md) and

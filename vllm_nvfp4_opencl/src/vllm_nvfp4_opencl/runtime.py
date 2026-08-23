@@ -254,6 +254,88 @@ class DeviceBuffer:
         self.close()
 
 
+class MoeBank:
+    def __init__(
+        self,
+        runtime: Runtime,
+        handle: C.c_void_p,
+        experts: int,
+        hidden: int,
+        intermediate: int,
+    ):
+        self.runtime = runtime
+        self.handle = handle
+        self.experts = experts
+        self.hidden = hidden
+        self.intermediate = intermediate
+
+    def upload_projection(
+        self,
+        expert: int,
+        projection: int,
+        packed: np.ndarray,
+        scales: np.ndarray,
+        checkpoint_global_scale: float,
+    ) -> None:
+        if projection not in (0, 1, 2):
+            raise ValueError("projection must be 0=gate, 1=up, or 2=down")
+        rows, cols = (
+            (self.intermediate, self.hidden)
+            if projection < 2
+            else (self.hidden, self.intermediate)
+        )
+        if (
+            not 0 <= expert <= self.experts
+            or packed.shape != (rows, cols // 2)
+            or scales.shape != (rows, cols // 16)
+            or packed.dtype != np.uint8
+            or scales.dtype != np.uint8
+            or not packed.flags.c_contiguous
+            or not scales.flags.c_contiguous
+        ):
+            raise ValueError("invalid contiguous uint8 MoE projection")
+        self.runtime._check(
+            self.runtime.lib.nvfp4_moe_bank_upload_projection(
+                self.handle,
+                expert,
+                projection,
+                C.c_void_p(packed.ctypes.data),
+                packed.nbytes,
+                C.c_void_p(scales.ctypes.data),
+                scales.nbytes,
+                checkpoint_global_scale,
+            ),
+            "nvfp4_moe_bank_upload_projection",
+        )
+
+    def upload_expert(
+        self,
+        expert: int,
+        projections: list[tuple[np.ndarray, np.ndarray, float]],
+    ) -> None:
+        if len(projections) != 3:
+            raise ValueError("an MoE expert requires gate, up, and down projections")
+        for projection, values in enumerate(projections):
+            self.upload_projection(expert, projection, *values)
+
+    def decode_device(self, x: DeviceBuffer, out: DeviceBuffer) -> DeviceBuffer:
+        self.runtime._check(
+            self.runtime.lib.nvfp4_moe_bank_decode_device_enqueue_f32(
+                self.handle, x.handle, out.handle
+            ),
+            "nvfp4_moe_bank_decode_device_enqueue_f32",
+        )
+        return out
+
+    def close(self) -> None:
+        if self.handle:
+            self.runtime.lib.nvfp4_moe_bank_destroy(self.handle)
+            self.handle = C.c_void_p()
+
+    def __del__(self) -> None:
+        self.close()
+
+
 class Runtime:
     def __init__(self, dll_path: Path, kernel_path: Path):
         self.lib = C.CDLL(str(dll_path))
@@ -336,6 +418,36 @@ class Runtime:
         ]
         self.lib.nvfp4_matrix_cpu_linear_f32.restype = C.c_int
         self.lib.nvfp4_matrix_destroy.argtypes = [C.c_void_p]
+        self.lib.nvfp4_moe_bank_create.argtypes = [
+            C.c_void_p,
+            C.c_void_p,
+            C.c_size_t,
+            C.c_void_p,
+            C.c_size_t,
+            C.c_int,
+            C.c_int,
+            C.c_int,
+            C.POINTER(C.c_void_p),
+        ]
+        self.lib.nvfp4_moe_bank_create.restype = C.c_int
+        self.lib.nvfp4_moe_bank_upload_projection.argtypes = [
+            C.c_void_p,
+            C.c_int,
+            C.c_int,
+            C.c_void_p,
+            C.c_size_t,
+            C.c_void_p,
+            C.c_size_t,
+            C.c_float,
+        ]
+        self.lib.nvfp4_moe_bank_upload_projection.restype = C.c_int
+        self.lib.nvfp4_moe_bank_decode_device_enqueue_f32.argtypes = [
+            C.c_void_p,
+            C.c_void_p,
+            C.c_void_p,
+        ]
+        self.lib.nvfp4_moe_bank_decode_device_enqueue_f32.restype = C.c_int
+        self.lib.nvfp4_moe_bank_destroy.argtypes = [C.c_void_p]
         self.lib.nvfp4_linear_f32.argtypes = [
             C.c_void_p,
             C.c_void_p,
@@ -704,6 +816,46 @@ class Runtime:
             packed.shape[1] * 2,
             use_shared,
         )
+
+    def create_moe_bank(
+        self,
+        router_bf16: np.ndarray,
+        shared_gate_bf16: np.ndarray,
+        intermediate: int,
+    ) -> MoeBank:
+        if (
+            router_bf16.ndim != 2
+            or router_bf16.dtype != np.uint16
+            or not router_bf16.flags.c_contiguous
+            or router_bf16.shape[0] < 8
+            or router_bf16.shape[0] > 256
+            or intermediate <= 0
+            or intermediate % 16 != 0
+        ):
+            raise ValueError("router must be contiguous BF16 bits [8..256, hidden]")
+        shared_gate_bf16 = np.ascontiguousarray(shared_gate_bf16.reshape(-1))
+        if (
+            shared_gate_bf16.dtype != np.uint16
+            or shared_gate_bf16.size != router_bf16.shape[1]
+        ):
+            raise ValueError("shared gate must be BF16 bits [hidden]")
+        experts, hidden = router_bf16.shape
+        handle = C.c_void_p()
+        self._check(
+            self.lib.nvfp4_moe_bank_create(
+                self.handle,
+                C.c_void_p(router_bf16.ctypes.data),
+                router_bf16.nbytes,
+                C.c_void_p(shared_gate_bf16.ctypes.data),
+                shared_gate_bf16.nbytes,
+                experts,
+                hidden,
+                intermediate,
+                C.byref(handle),
+            ),
+            "nvfp4_moe_bank_create",
+        )
+        return MoeBank(self, handle, experts, hidden, intermediate)
 
     def linear_shared_cpu(
         self,

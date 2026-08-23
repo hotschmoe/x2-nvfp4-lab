@@ -1,0 +1,118 @@
+{
+  "campaign": "bandwidth-first",
+  "schema_version": 1,
+  "timestamp": "2026-08-22T20:16:41-07:00",
+  "hardware": {
+    "system_model": "ASUS Zenbook A16 UX3607OA",
+    "gpu": "Qualcomm(R) Adreno(TM) X2-90 GPU"
+  },
+  "software": {
+    "command": [
+      "native_nvfp4/bench_moe_device_bank.py",
+      "--warmups",
+      "1",
+      "--samples",
+      "3"
+    ]
+  },
+  "environment": {
+    "power_source": "AC",
+    "battery_percent": 100,
+    "thermal_regime": "warm-burst"
+  },
+  "workload": {
+    "operation": "qwen35_moe_device_routed_svm_bank",
+    "format": "nvfp4_expert_bank_bf16_router",
+    "layer": 0,
+    "experts_resident": 256,
+    "top_k": 8,
+    "selected_experts": [
+      60,
+      111,
+      188,
+      144,
+      224,
+      92,
+      105,
+      252
+    ],
+    "routing_weights": [
+      0.13847772777080536,
+      0.1348167359828949,
+      0.12773190438747406,
+      0.12449581921100616,
+      0.12247435748577118,
+      0.12109769135713577,
+      0.11687330156564713,
+      0.11403243988752365
+    ],
+    "shared_expert_gate": 0.4993850172804551,
+    "resident_bank_payload_bytes": 454754304,
+    "active_logical_payload_bytes": 16977920
+  },
+  "loading": {
+    "checkpoint_seconds": 0.10197349998634309,
+    "bank_upload_seconds": 0.11973339994437993,
+    "available_memory_before_bytes": 39473364992,
+    "available_with_sources_bytes": 38533701632,
+    "available_after_source_release_bytes": 38533701632
+  },
+  "timing": {
+    "warmups": 1,
+    "samples": 3,
+    "kernel_ms": {
+      "median": 0.7596,
+      "p10": 0.7548800000000001,
+      "p90": 0.76576,
+      "minimum": 0.7537,
+      "maximum": 0.7673
+    },
+    "wall_ms": {
+      "median": 0.8998,
+      "p10": 0.8892400000000001,
+      "p90": 1.19052,
+      "minimum": 0.8866,
+      "maximum": 1.2632
+    }
+  },
+  "bandwidth": {
+    "logical_gbs": 22.35113217482886,
+    "matched_island_ceiling_gbs": 129.0,
+    "island_utilization": 0.1732645905025493,
+    "physical_gbs": null
+  },
+  "correctness": {
+    "passed": true,
+    "max_abs_error": 1.1641532182693481e-09,
+    "expected_router_ids": [
+      60,
+      111,
+      188,
+      144,
+      224,
+      92,
+      105,
+      252
+    ],
+    "finite_outputs": true,
+    "explicit_completion_marker": true
+  },
+  "limitations": [
+    "single-token one-layer decode micrograph",
+    "all 256 routed experts plus the shared expert are resident for one layer only",
+    "attention, norms, residuals, sampling, and serving overhead are excluded",
+    "physical DRAM traffic and per-kernel component timings are unavailable"
+  ],
+  "samples": {
+    "kernel_ms": [
+      0.7596,
+      0.7673,
+      0.7537
+    ],
+    "wall_ms": [
+      1.2632,
+      0.8998,
+      0.8866
+    ]
+  }
+}

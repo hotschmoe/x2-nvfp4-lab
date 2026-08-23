@@ -558,6 +558,216 @@ kernel void bf16_gemv_subgroup(
     }
 }
 
+// Single-token Qwen3.5 routing. The selected softmax weights are renormalized
+// over top-8, so the full-softmax denominator cancels and only the selected
+// exponentials are needed. Slot 8 is reserved for the always-on shared expert.
+__attribute__((reqd_work_group_size(256, 1, 1)))
+kernel void moe_top8_route_f32(
+    global const float * logits,
+    global const float * shared_gate_logit,
+    global uint * expert_ids,
+    global float * expert_weights,
+    uint num_experts
+) {
+    local float values[256];
+    local float top_values[8];
+    local uint top_ids[8];
+    const uint tid = get_local_id(0);
+    values[tid] = tid < num_experts ? logits[tid] : -3.402823466e+38f;
+    barrier(CLK_LOCAL_MEM_FENCE);
+    if (tid == 0) {
+        for (uint slot = 0; slot < 8; ++slot) {
+            float best = -3.402823466e+38f;
+            uint best_id = 0;
+            for (uint expert = 0; expert < num_experts; ++expert) {
+                const float candidate = values[expert];
+                if (candidate > best ||
+                    (candidate == best && expert < best_id)) {
+                    best = candidate;
+                    best_id = expert;
+                }
+            }
+            top_values[slot] = best;
+            top_ids[slot] = best_id;
+            values[best_id] = -3.402823466e+38f;
+        }
+        float denominator = 0.0f;
+        for (uint slot = 0; slot < 8; ++slot) {
+            denominator += exp(top_values[slot] - top_values[0]);
+        }
+        for (uint slot = 0; slot < 8; ++slot) {
+            expert_ids[slot] = top_ids[slot];
+            expert_weights[slot] =
+                exp(top_values[slot] - top_values[0])/denominator;
+        }
+        expert_ids[8] = num_experts;
+        const float shared_logit = shared_gate_logit[0];
+        expert_weights[8] = 1.0f/(1.0f + exp(-shared_logit));
+    }
+}
+
+// A contiguous bank replaces CUDA-style device pointer tables: each selected
+// expert is reached by an index-derived offset inside one SVM allocation.
+__attribute__((reqd_work_group_size(
+    NVFP4_SUBGROUP_WIDTH*NVFP4_DECODE_ROW_TILE, 1, 1)))
+__attribute__((qcom_reqd_sub_group_size("half")))
+kernel void moe_bank_gate_up_f32(
+    global const uchar * gate_packed,
+    global const uchar * gate_scales,
+    global const uchar * up_packed,
+    global const uchar * up_scales,
+    global const float * inverse_global_scales,
+    global const float * x,
+    global const uint * expert_ids,
+    global float * gate_out,
+    global float * up_out,
+    uint num_experts,
+    uint hidden,
+    uint intermediate
+) {
+    const uint subgroup = get_sub_group_id();
+    const uint row = get_group_id(0)*NVFP4_DECODE_ROW_TILE + subgroup;
+    const uint slot = get_group_id(1);
+    const uint projection = get_group_id(2);
+    const uint lane = get_sub_group_local_id();
+    const uint local_thread = get_local_id(0);
+    if (slot >= 9 || projection >= 2) return;
+    const uint expert = slot < 8 ? expert_ids[slot] : num_experts;
+    const ulong matrix_packed = (ulong)intermediate*(hidden/2);
+    const ulong matrix_scales = (ulong)intermediate*(hidden/16);
+    const uint safe_row = row < intermediate ? row : 0;
+    global const uchar * packed =
+        (projection == 0 ? gate_packed : up_packed) +
+        (ulong)expert*matrix_packed + (ulong)safe_row*(hidden/2);
+    global const uchar * scales =
+        (projection == 0 ? gate_scales : up_scales) +
+        (ulong)expert*matrix_scales + (ulong)safe_row*(hidden/16);
+    const uint bank_slots = num_experts + 1;
+    const float global_scale =
+        inverse_global_scales[projection*bank_slots + expert];
+    local float x_tile[NVFP4_DECODE_K_TILE];
+    float sum = 0.0f;
+    for (uint tile_base = 0; tile_base < hidden;
+         tile_base += NVFP4_DECODE_K_TILE) {
+        for (uint index = local_thread; index < NVFP4_DECODE_K_TILE;
+             index += NVFP4_SUBGROUP_WIDTH*NVFP4_DECODE_ROW_TILE) {
+            const uint col = tile_base + index;
+            x_tile[index] = col < hidden ? x[col] : 0.0f;
+        }
+        barrier(CLK_LOCAL_MEM_FENCE);
+        const uint block = tile_base/16 + lane;
+        if (row < intermediate && block < hidden/16) {
+            const float scale = e4m3_scale_to_fp32(scales[block])*global_scale;
+            const uint qbase = block*8;
+            const uint xbase = lane*16;
+            #pragma unroll
+            for (uint byte_index = 0; byte_index < 8; ++byte_index) {
+                const uchar q = packed[qbase + byte_index];
+                sum += scale*x_tile[xbase + 2*byte_index]*
+                    kvalues_nvfp4_f[q & 0x0F];
+                sum += scale*x_tile[xbase + 2*byte_index + 1]*
+                    kvalues_nvfp4_f[q >> 4];
+            }
+        }
+        barrier(CLK_LOCAL_MEM_FENCE);
+    }
+    sum = sub_group_reduce_add(sum);
+    if (row < intermediate && lane == 0) {
+        global float * output = projection == 0 ? gate_out : up_out;
+        output[slot*intermediate + row] = sum;
+    }
+}
+
+kernel void moe_bank_silu_mul_f32(
+    global const float * gate,
+    global const float * up,
+    global float * activation,
+    uint elements
+) {
+    const uint index = get_global_id(0);
+    if (index < elements) {
+        const float value = gate[index];
+        activation[index] = value/(1.0f + exp(-value))*up[index];
+    }
+}
+
+__attribute__((reqd_work_group_size(
+    NVFP4_SUBGROUP_WIDTH*NVFP4_DECODE_ROW_TILE, 1, 1)))
+__attribute__((qcom_reqd_sub_group_size("half")))
+kernel void moe_bank_down_f32(
+    global const uchar * packed_bank,
+    global const uchar * scale_bank,
+    global const float * inverse_global_scales,
+    global const float * activation,
+    global const uint * expert_ids,
+    global float * expert_outputs,
+    uint num_experts,
+    uint hidden,
+    uint intermediate
+) {
+    const uint subgroup = get_sub_group_id();
+    const uint row = get_group_id(0)*NVFP4_DECODE_ROW_TILE + subgroup;
+    const uint slot = get_group_id(1);
+    const uint lane = get_sub_group_local_id();
+    const uint local_thread = get_local_id(0);
+    if (slot >= 9) return;
+    const uint expert = slot < 8 ? expert_ids[slot] : num_experts;
+    const ulong matrix_packed = (ulong)hidden*(intermediate/2);
+    const ulong matrix_scales = (ulong)hidden*(intermediate/16);
+    const uint safe_row = row < hidden ? row : 0;
+    global const uchar * packed = packed_bank +
+        (ulong)expert*matrix_packed + (ulong)safe_row*(intermediate/2);
+    global const uchar * scales = scale_bank +
+        (ulong)expert*matrix_scales + (ulong)safe_row*(intermediate/16);
+    const float global_scale =
+        inverse_global_scales[2*(num_experts + 1) + expert];
+    global const float * input = activation + slot*intermediate;
+    local float x_tile[NVFP4_DECODE_K_TILE];
+    float sum = 0.0f;
+    for (uint tile_base = 0; tile_base < intermediate;
+         tile_base += NVFP4_DECODE_K_TILE) {
+        for (uint index = local_thread; index < NVFP4_DECODE_K_TILE;
+             index += NVFP4_SUBGROUP_WIDTH*NVFP4_DECODE_ROW_TILE) {
+            const uint col = tile_base + index;
+            x_tile[index] = col < intermediate ? input[col] : 0.0f;
+        }
+        barrier(CLK_LOCAL_MEM_FENCE);
+        const uint block = tile_base/16 + lane;
+        if (row < hidden && block < intermediate/16) {
+            const float scale = e4m3_scale_to_fp32(scales[block])*global_scale;
+            const uint qbase = block*8;
+            const uint xbase = lane*16;
+            #pragma unroll
+            for (uint byte_index = 0; byte_index < 8; ++byte_index) {
+                const uchar q = packed[qbase + byte_index];
+                sum += scale*x_tile[xbase + 2*byte_index]*
+                    kvalues_nvfp4_f[q & 0x0F];
+                sum += scale*x_tile[xbase + 2*byte_index + 1]*
+                    kvalues_nvfp4_f[q >> 4];
+            }
+        }
+        barrier(CLK_LOCAL_MEM_FENCE);
+    }
+    sum = sub_group_reduce_add(sum);
+    if (row < hidden && lane == 0) expert_outputs[slot*hidden + row] = sum;
+}
+
+kernel void moe_bank_reduce_f32(
+    global const float * expert_outputs,
+    global const float * expert_weights,
+    global float * output,
+    uint hidden
+) {
+    const uint index = get_global_id(0);
+    if (index < hidden) {
+        float sum = 0.0f;
+        for (uint slot = 0; slot < 9; ++slot) {
+            sum += expert_weights[slot]*expert_outputs[slot*hidden + index];
+        }
+        output[index] = sum;
+    }
+}
+
 // Converts the native Qwen3.5 projection/conv layout
 // [16*128 query, 16*128 key, 48*128 value] into the 48-head recurrent layout,
 // repeating key heads three times and normalizing Q/K exactly once on device.

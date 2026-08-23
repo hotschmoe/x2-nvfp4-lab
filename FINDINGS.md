@@ -210,6 +210,14 @@ exact selected expert IDs and `1.16e-9` final-output maximum error. The remainin
 MoE graph gap is device-resident top-k/indirect dispatch plus staged full-model
 expert residency, not expert arithmetic correctness.
 
+The device-dispatch gap is now closed for one layer. A contiguous fine-grained
+SVM bank holds all 256 routed experts plus the shared expert, a GPU top-8 kernel
+produces IDs/weights, and row-tiled bank kernels consume those IDs without a
+host boundary. The 30-sample result is 0.7563 ms kernel / 0.9231 ms wall with
+`1.16e-9` final-output error, improving the host-dispatch wall by 27.7%. The cost
+is 454.75 MB per layer; 40 banks are 16.94 GiB, so staged full-checkpoint budget
+validation is now the binding MoE task.
+
 ## First decoder benchmarks
 
 Direct row-scaled FP8 kernels now accompany NVFP4 in the persistent runtime. A

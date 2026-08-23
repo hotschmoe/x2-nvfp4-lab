@@ -332,3 +332,38 @@ This remains a one-token MoE-layer micrograph. Attention, input/output norms,
 residuals, sampling, complete-model residency, and serving overhead are not
 included. Reproduction artifact:
 `campaign_results/bandwidth-first/20260822-200044-231748-moe-routed-layer.json`.
+
+### Device-routed contiguous SVM expert bank
+
+The device-bank successor keeps all 256 routed layer-0 experts plus the shared
+expert in six contiguous SVM weight/scale arrays. A device top-8 kernel writes
+expert IDs and normalized weights; row-tiled gate/up and down kernels derive
+the selected matrix offsets inside the bank. The shared expert is slot 8, so one
+device reduction completes the layer without router readback.
+
+| Metric | Device-bank result | Host-dispatch result |
+|---|---:|---:|
+| Resident layer bank | 454,754,304 bytes | selected matrices only |
+| Steady GPU launches | 7 | approximately 47 |
+| Queue materializations | 1 | 2 |
+| Median kernel time | 0.7563 ms | 0.8230 ms |
+| Median wall time | 0.9231 ms | 1.2767 ms |
+| Final maximum absolute error | `1.16e-9` | `1.16e-9` |
+
+The 30-sample device-bank run improves kernel time by 8.1% and wall time by
+27.7%. Its first one-subgroup-per-row form was a negative control at 1.4037 ms;
+applying the proven four-row/1,024-K activation tile reduced it to 0.7563 ms.
+This isolates activation reuse and launch count as material effects.
+
+Streaming expert tensors from safetensors into the bank avoids assembling a
+454.8 MB host concatenation. Bank creation and streaming took 0.2220 seconds in
+the canonical cached-file run. Available physical memory fell by approximately
+475 MB after allocation, close to one bank rather than two. Forty such banks are
+16.94 GiB before router, attention, recurrent, embedding, LM-head, KV, and
+scratch storage; the full checkpoint is 21.81 GiB of safetensors against an
+observed 23.81 GiB OpenCL global budget. Full residency is therefore plausible
+but too close to the budget to attempt without the staged 1/2/4/8 GiB safety
+ladder and explicit KV/headroom accounting.
+
+Canonical artifact:
+`campaign_results/bandwidth-first/20260822-201826-627077-moe-device-bank.json`.

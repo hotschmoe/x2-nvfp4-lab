@@ -13,6 +13,11 @@ and scalar gates, plus reset-or-add weighted float32 accumulation for sparse
 expert reduction. These preserve BF16 router storage and keep routed expert
 outputs resident until the graph's explicit materialization boundary.
 
+`nvfp4_moe_bank` adds a device-routed sparse decode path. It stores all routed
+experts plus the shared expert in contiguous fine-grained SVM allocations,
+streams one projection at a time into indexed offsets, and runs BF16 routing,
+top-8, row-tiled NVFP4 experts, and weighted reduction in one queued stage.
+
 The bandwidth-campaign ABI also exposes OpenCL/SVM capability metadata, raw
 checksum-protected CPU/GPU streaming reads, and fine-grained-SVM native matrix
 handles. `nvfp4_matrix_upload_shared_svm` copies checkpoint bytes once into SVM,

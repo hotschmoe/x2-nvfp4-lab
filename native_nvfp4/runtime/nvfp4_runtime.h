@@ -20,6 +20,7 @@ extern "C" {
 
 typedef struct nvfp4_runtime nvfp4_runtime;
 typedef struct nvfp4_matrix nvfp4_matrix;
+typedef struct nvfp4_moe_bank nvfp4_moe_bank;
 typedef struct fp8_matrix fp8_matrix;
 typedef struct nvfp4_buffer nvfp4_buffer;
 typedef struct nvfp4_bandwidth_buffer nvfp4_bandwidth_buffer;
@@ -317,6 +318,37 @@ NVFP4_API nvfp4_status nvfp4_bf16_gemv_device_enqueue(
     int rows,
     int cols,
     nvfp4_buffer * dst);
+
+// Device-routed single-token Qwen3.5 MoE bank. Expert indices [0, experts)
+// are routed; index `experts` stores the always-on shared expert.
+NVFP4_API nvfp4_status nvfp4_moe_bank_create(
+    nvfp4_runtime * runtime,
+    const uint16_t * router_bf16,
+    size_t router_bytes,
+    const uint16_t * shared_gate_bf16,
+    size_t shared_gate_bytes,
+    int experts,
+    int hidden,
+    int intermediate,
+    nvfp4_moe_bank ** out_bank);
+
+// projection: 0=gate, 1=up, 2=down.
+NVFP4_API nvfp4_status nvfp4_moe_bank_upload_projection(
+    nvfp4_moe_bank * bank,
+    int expert,
+    int projection,
+    const uint8_t * packed,
+    size_t packed_bytes,
+    const uint8_t * scales_e4m3,
+    size_t scale_bytes,
+    float weight_global_scale);
+
+NVFP4_API nvfp4_status nvfp4_moe_bank_decode_device_enqueue_f32(
+    nvfp4_moe_bank * bank,
+    const nvfp4_buffer * x,
+    nvfp4_buffer * dst);
+
+NVFP4_API void nvfp4_moe_bank_destroy(nvfp4_moe_bank * bank);
 
 NVFP4_API nvfp4_status qwen35_prepare_gated_delta_decode_device_enqueue_f32(
     nvfp4_runtime * runtime,
