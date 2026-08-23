@@ -555,9 +555,10 @@ Prioritized next questions, including work not yet performed:
 
 1. **Server-facing prefill and sampling.** Official tokenizer-backed coding
    generation now produces correct code and EOS-stops at 13.86 prefill / 11.75
-   decode tok/s. Replace sequential prefill with shared-weight GEMM batching,
-   add the official top-k 20/top-p 0.95 sampler, and expose request cancellation
-   and streaming through the worker boundary.
+   decode tok/s. The isolated GEMM sweep now finds direct-vector dense kernels
+   at 159-160 GFLOP/s and 1.11-1.49x over production. Integrate them into a
+   recurrent/attention-aware multi-token graph, then add the official top-k
+   20/top-p 0.95 sampler, cancellation, and streaming through the worker boundary.
 2. **Complete the serving trace.** Barrier-free native traces now label all
    1,042 dense and 772 MoE device events and separate the dense 56 NVFP4 versus
    eight FP8 MLP layers. Extend the same trace ID through tokenizer, request

@@ -853,3 +853,26 @@ These are isolated kernel results. The dense projection gains project to about
 68 ms less work in the current 515 ms full-token trace, but only a full-model A/B
 can turn that estimate into a throughput claim. Method, controls, both artifacts,
 and the next experiment matrix are documented in `NVFP4_KERNEL_LAB.md`.
+
+## Multi-vector NVFP4 GEMM sweep
+
+The prefill laboratory sweeps 80 treatments per `(shape, vectors)` case across
+2/4/8/16/32 input vectors. Its first complete run passed all 1,600 correctness
+gates; a narrower 20-sample reverse-order repeat passed another 400.
+
+| Shape | Vectors | Repeated winner | Median | GFLOP/s | Speedup |
+|---|---:|---|---:|---:|---:|
+| dense gate/up | 2 | direct vector v2 | 2.710 ms | 131.6 | 1.205x |
+| dense gate/up | 16 | direct vector v16 | 17.972 ms | 158.7 | 1.248x |
+| dense gate/up | 32 | direct vector v16 | 35.865 ms | 159.1 | 1.266x |
+| dense down | 2 | direct vector v2 | 2.697 ms | 132.2 | 1.456x |
+| dense down | 16 | direct vector v16 | 17.867 ms | 159.6 | 1.491x |
+| dense down | 32 | direct vector v16 | 36.173 ms | 157.7 | 1.484x |
+| expert gate/up | 32 | direct vector v1 | 0.3587 ms | 187.1 | 1.148x |
+| expert down | 2 | direct vector v4 | 0.0450 ms | 93.3 | 1.150x |
+| expert down | 8-32 | production local v4 | 0.161-0.609 ms | 104.5-110.1 | 1.000x |
+
+Direct vector decode winning here while scalar local decode wins GEMV is the
+strongest evidence so far that prefill and decode require different kernel
+families. The results remain isolated linears; TTFT claims wait for a correct
+multi-token model graph.

@@ -58,6 +58,10 @@ Current highlights on an Adreno X2-90:
   decode structure is shape-specific. Repeated dense winners reach about
   **45 GB/s** and cut isolated gate/up/down GEMV latency by **24-25%**; the MoE
   LM head improves **1.225x**. Explicit vector decode loses on the large shapes.
+- The companion 1,600-treatment prefill sweep reaches **159-160 GFLOP/s** on
+  dense GEMM and improves the current full-row local kernel by **1.11-1.49x**.
+  Unlike decode, direct-global vector decode wins; short-K MoE down crosses back
+  to the production local kernel at eight vectors.
 - Independent CPU/GPU tensor oracles and isolated-process accelerator gates.
 
 Start with [CAMPAIGN_BANDWIDTH_FIRST.md](CAMPAIGN_BANDWIDTH_FIRST.md) and

@@ -127,6 +127,48 @@ Hybrid is an experimental treatment, not an architectural assumption. The NPU
 split survives only if measured overlap exceeds format expansion and cross-runtime
 handoff cost.
 
+## Multi-vector GEMM / prefill sweep
+
+The second laboratory flips the reuse direction. For GEMV, multiple output rows
+share one activation tile. For GEMM, multiple prompt vectors may share one native
+weight row. The sweep tests 1/2/4/8/16 vector subgroups per work-group, local
+weight tiles from 512 through 32768 K values, direct-global controls, scalar and
+explicit vector decode, and prompt batches of 2/4/8/16/32 vectors.
+
+The complete run covered four checkpoint shapes and 1,600 candidate/case pairs;
+all passed. A reversed-shape-order repeat retained the direct-vector candidates,
+used 20 timing samples, and passed another 400 candidate/case gates.
+
+| Shape | Vector range | Repeated policy | Performance range | Speedup range |
+|---|---:|---|---:|---:|
+| dense gate/up 17408x5120 | 2-32 | direct vector, tile tracks active vectors up to 16 | 131.6-159.1 GFLOP/s | 1.11-1.27x |
+| dense down 5120x17408 | 2-32 | direct vector, tile tracks active vectors up to 16 | 132.2-159.6 GFLOP/s | 1.32-1.49x |
+| MoE expert gate/up 512x2048 | 2-32 | direct vector, one subgroup/work-group | 145.4-187.1 GFLOP/s | 1.15-1.29x |
+| MoE expert down 2048x512 | 2-4 direct vector; production from 8 onward | 93.3-110.1 GFLOP/s | 1.15x down to parity |
+
+Dense effective model bandwidth rises from about 37 GB/s at two vectors to
+about 45 GB/s at 16-32 vectors, or roughly 29-35% of the 129 GB/s streaming
+ceiling and 16-20% of nominal 228 GB/s. MoE gate reaches about 54 GB/s effective
+model bandwidth at 32 vectors. These effective rates count one useful matrix use
+per vector; the JSON also reports the ideal compulsory-byte lower bound. Neither
+is a hardware-counter measurement of physical traffic.
+
+The vector result reverses the decode finding. Explicit vector decode loses on
+large batch-one GEMV but wins multi-vector GEMM, while local weight staging loses
+to direct reads on dense shapes. That is evidence for phase-specific kernels,
+not a contradiction: prefill exposes more independent activation streams and a
+different cache/register/occupancy balance. The short-K expert down remains a
+counterexample and keeps the production local path at eight or more vectors.
+
+Canonical artifacts:
+
+- `20260822-225440-604739-nvfp4-gemm-lab.json`
+- `20260822-225726-770266-nvfp4-gemm-lab.json`
+
+The next gate is not another isolated GFLOP/s number. A winner must enter a
+multi-token recurrent/attention-aware prefill graph and reduce tokenizer-backed
+TTFT without changing logits.
+
 ## Primary references
 
 - [Qualcomm Snapdragon Mobile Platform OpenCL General Programming and Optimization Guide](https://docs.qualcomm.com/bundle/publicresource/80-NB295-11_REV_C_Qualcomm_Snapdragon_Mobile_Platform_Opencl_General_Programming_and_Optimization.pdf)

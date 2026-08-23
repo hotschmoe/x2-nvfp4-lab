@@ -56,3 +56,8 @@ It sweeps row sharing, dynamic local K tiles, direct-global controls, and
 scalar/vector decode without changing production kernel selection. Use
 `native_nvfp4/bench_nvfp4_kernel_lab.py`; candidates must pass its output oracle
 before timing and still require full-model A/B before promotion.
+
+`nvfp4_gemm_device_lab_f32` provides the corresponding multi-vector treatments:
+dynamic vector sharing and weight K tiles, plus direct-global scalar/vector
+controls. It is exercised by `native_nvfp4/bench_nvfp4_gemm_lab.py` and is not a
+production dispatch promise.

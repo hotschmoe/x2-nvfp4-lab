@@ -588,6 +588,7 @@ Reproduction entry points:
 - `native_nvfp4/bench_moe_full_model.py`
 - `native_nvfp4/bench_dense_full_model.py`
 - `native_nvfp4/bench_nvfp4_kernel_lab.py`
+- `native_nvfp4/bench_nvfp4_gemm_lab.py`
 - `native_nvfp4/probe_tensor_scaled_fp8.py`
 - `native_nvfp4/inventory_checkpoint_memory.py`
 - `campaign_results/bandwidth-first/*.json`

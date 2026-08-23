@@ -386,3 +386,12 @@ and head shapes, proving local activation reuse repays its barriers there.
 Explicit `uchar8`/`float8` decode also loses on the large shapes, so nominal load
 width is not evidence of lower instruction/register cost. See
 `NVFP4_KERNEL_LAB.md` and the two canonical `*-nvfp4-kernel-lab.json` artifacts.
+
+The multi-vector sweep then reverses one decode conclusion. Across 2-32 prompt
+vectors, direct-global explicit vector decode reaches 159-160 GFLOP/s on both
+dense projection directions and improves the production full-row local kernel
+by 1.11-1.49x. The 512x2048 expert gate reaches 187 GFLOP/s at 32 vectors with
+one vector subgroup per work-group. The 2048x512 expert down crosses back to the
+production local kernel at eight vectors. Prefill and decode therefore need
+separate shape/phase dispatch, and isolated GEMM gains still need an exact
+attention/recurrent-aware TTFT A/B.
