@@ -34,6 +34,10 @@ The current boundary is deliberately explicit:
   from that profile rather than assuming the dense model.
 - Sampling, preemption/state transfer, and automatic OOT model-runner attachment
   are not yet implemented.
+- Outside the packaged adapter, the native full-model qualification now retains
+  all 40 Ornith layers, 32K BF16 state, final NVFP4 head, and tokenizer-backed
+  greedy generation at 11.75 end-to-end tok/s. Moving that registry/session
+  boundary into this package is the immediate integration task.
 
 The backend is opt-in so installing the plugin cannot hijack unrelated CPU
 vLLM deployments:

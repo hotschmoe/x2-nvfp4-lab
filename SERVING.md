@@ -8,25 +8,28 @@ operator dispatch.
 
 ## Current executable slice
 
-The four-layer Qwen3.5 cadence already executes:
+The complete 40-layer Ornith coding model now executes:
 
 - checkpoint-native NVFP4 MLP projections on Adreno;
 - checkpoint-native row-scaled FP8 attention projections on Adreno;
 - persistent gated-delta state on Adreno;
 - persistent causal-convolution state and weights on Adreno;
-- real Transformers attention, normalization, residual, cache, and layer flow.
+- real attention, normalization, residual, cache, and layer flow;
+- 40 independent 256+shared expert banks and all 18.448 GiB of planned text
+  compute weights resident at once;
+- a shared 32K BF16 paged-KV allocation, persistent recurrent/conv state, final
+  RMSNorm, the 248,320-row NVFP4 LM head, and lazy embedding-row gathers.
 
 The original optimized cached-decode result was 55.78 ms per four-layer cadence.
 The row-tiled NVFP4 decode kernel subsequently reached 47.07 ms (21.25 cadence
 tokens/s) with the same output RMS. Sustained results vary with Adreno DVFS, so
 serving qualification must report repeated distributions rather than one peak.
 
-The runtime can now queue a complete linear-attention decoder layer without a
-host boundary. The exact layer-0 graph includes input RMSNorm, FP8 projections,
-the two small control projections, persistent convolution, Q/K layout and
-normalization, persistent gated-delta, gated RMSNorm, output projection,
-NVFP4 MLP, and both residuals. Its combined result is 12.18 ms of kernel time
-and 12.28 ms queued wall with 1.43e-6 maximum error against the staged oracle.
+The full 40-layer plus LM-head token measures 75.884 ms kernel / 79.381 ms wall.
+A tokenizer-backed coding request prefills sequentially at 13.86 tok/s and
+decodes at 11.75 end-to-end tok/s. It generates valid Python, stops on the
+official `<|im_end|>` token, and matches a layer-synchronized replay exactly at
+every generated position.
 
 ## Runtime contract to build next
 
@@ -42,13 +45,14 @@ Completed foundations:
 
 Next serving boundary:
 
-1. Add one sequence-state object per request: full-attention KV cache, existing
-   gated-delta state, causal
-   convolution history, position, and cancellation flag.
-2. Implement resident full-attention decode (RoPE, KV append, grouped-query
-   softmax/value reduction) to complete the four-layer cadence.
-3. Add `prefill(sequence, token_ids)` and `decode_batch(sequences)` worker calls.
-4. Connect those calls to a vLLM out-of-tree worker while retaining vLLM's
+1. Move the complete registry/session boundary out of the benchmark into the
+   packaged provider with explicit per-request position and cancellation state.
+2. Replace sequential prompt execution with batched shared-weight prefill GEMM.
+3. Add the official top-k 20/top-p 0.95/temperature sampler and stream token IDs
+   without downloading all 248,320 logits when possible.
+4. Add `prefill(sequence, token_ids)` and complete-model
+   `decode_batch(sequences)` worker calls.
+5. Connect those calls to a vLLM out-of-tree worker while retaining vLLM's
    scheduler and OpenAI-compatible server.
 
 Decode batching should group active sequences at the worker boundary, not inside
@@ -78,6 +82,8 @@ and the complete x86-64 binary cannot execute in ARM64 WSL.
 - Measure committed memory and device allocation failures before advancing.
 - Treat any driver reset or LiveKernelEvent 141 as a hard stop for that path.
 
-The next scale test remains a four-layer resident cadence including the new
-full-attention graph. No isolated-layer number should be extrapolated into a
-claimed full-model serving rate.
+The 24/30/35/40-bank gates and complete 32K BF16 text-model load now pass. The
+next safety tests are sustained thermal generation, multi-request allocation,
+request cancellation/reclamation, and dense-27B full residency. The measured
+11.75 tok/s Ornith number is a real full-model greedy decode result, not an
+isolated-layer extrapolation.

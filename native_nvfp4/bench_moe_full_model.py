@@ -91,6 +91,7 @@ class LazyEmbeddingRows:
         self._shard = self._context.__enter__()
         self._slice = self._shard.get_slice(self.name)
         self.shape = self._slice.get_shape()
+        self.touched: set[int] = set()
         self._closed = False
 
     def row(self, token_id: int) -> np.ndarray:
@@ -101,6 +102,7 @@ class LazyEmbeddingRows:
                 f"token ID {token_id} is outside vocabulary {self.shape[0]}"
             )
         value = self._slice[token_id : token_id + 1]
+        self.touched.add(token_id)
         return np.ascontiguousarray(value.float().numpy())
 
     def close(self) -> None:
@@ -391,7 +393,8 @@ class OrnithModelRegistry:
         position: int,
         *,
         sync_each_layer: bool,
-    ) -> tuple[np.ndarray, float, float]:
+        project_logits: bool = True,
+    ) -> tuple[np.ndarray | None, float, float]:
         if len(self.layers) != LAYERS or any(
             slot.bank is None for slot in self.layers
         ):
@@ -414,10 +417,15 @@ class OrnithModelRegistry:
             current = self.enqueue_layer(layer, current, destination)
             if sync_each_layer:
                 kernel_ns += self.runtime.synchronize().kernel_ns
-        self.head.enqueue(current)
+        if project_logits:
+            self.head.enqueue(current)
         profile = self.runtime.synchronize()
         kernel_ns += profile.kernel_ns
-        logits = self.head.logits.download((1, self.head.vocab_size))
+        logits = (
+            self.head.logits.download((1, self.head.vocab_size))
+            if project_logits
+            else None
+        )
         wall_ms = (time.perf_counter_ns() - started) / 1e6
         return logits, kernel_ns / 1e6, wall_ms
 
@@ -428,7 +436,11 @@ class OrnithModelRegistry:
         sync_each_layer: bool,
     ) -> tuple[np.ndarray, float, float]:
         self.begin_sequence()
-        return self.step(hidden, 0, sync_each_layer=sync_each_layer)
+        logits, kernel_ms, wall_ms = self.step(
+            hidden, 0, sync_each_layer=sync_each_layer
+        )
+        assert logits is not None
+        return logits, kernel_ms, wall_ms
 
     def close(self) -> None:
         if self._closed:
@@ -461,6 +473,7 @@ def main() -> int:
     parser.add_argument("--warmups", type=int, default=1)
     parser.add_argument("--samples", type=int, default=5)
     parser.add_argument("--generate-tokens", type=int, default=0)
+    parser.add_argument("--prompt")
     parser.add_argument("--results", type=Path, default=RESULTS)
     args = parser.parse_args()
     gates = [int(value) for value in args.gates.split(",")]
@@ -617,61 +630,152 @@ def main() -> int:
 
             if args.generate_tokens:
 
+                tokenizer = None
+                rendered_prompt = None
+                if args.prompt:
+                    from transformers import AutoTokenizer
+
+                    tokenizer = AutoTokenizer.from_pretrained(args.model)
+                    rendered_prompt = tokenizer.apply_chat_template(
+                        [{"role": "user", "content": args.prompt}],
+                        tokenize=False,
+                        add_generation_prompt=True,
+                    )
+                    seed_token_ids = tokenizer.encode(
+                        rendered_prompt, add_special_tokens=False
+                    )
+                    generation_config = json.loads(
+                        (args.model / "generation_config.json").read_text(
+                            encoding="utf-8"
+                        )
+                    )
+                    configured_eos = generation_config.get("eos_token_id", [])
+                    stop_token_ids = {
+                        int(token)
+                        for token in (
+                            configured_eos
+                            if isinstance(configured_eos, list)
+                            else [configured_eos]
+                        )
+                    }
+                else:
+                    seed_token_ids = [args.token_id]
+                    stop_token_ids = set()
+                positions = len(seed_token_ids) + args.generate_tokens - 1
+                if not seed_token_ids or positions > args.max_tokens:
+                    raise ValueError(
+                        "prompt plus generated tokens exceed context capacity"
+                    )
+
                 def generate(
                     sync_each_layer: bool,
-                ) -> tuple[
-                    list[int],
-                    list[np.ndarray],
-                    list[float],
-                    list[float],
-                    list[float],
-                ]:
+                ) -> tuple[dict[str, Any], list[np.ndarray]]:
                     registry.begin_sequence()
-                    token = args.token_id
-                    tokens = [token]
-                    logits_by_position: list[np.ndarray] = []
-                    kernel_ms: list[float] = []
-                    device_wall_ms: list[float] = []
-                    end_to_end_ms: list[float] = []
-                    for position in range(args.generate_tokens):
+                    prefill_kernel: list[float] = []
+                    prefill_device_wall: list[float] = []
+                    prefill_end_to_end: list[float] = []
+                    time_to_first_started = time.perf_counter_ns()
+                    last_logits = None
+                    for position, token in enumerate(seed_token_ids):
                         host_started = time.perf_counter_ns()
                         token_hidden = embeddings.row(token)
                         logits, kernel, device_wall = registry.step(
                             token_hidden,
                             position,
                             sync_each_layer=sync_each_layer,
+                            project_logits=position == len(seed_token_ids) - 1,
                         )
-                        token = int(np.argmax(logits))
-                        end_to_end = (
+                        prefill_end_to_end.append(
                             time.perf_counter_ns() - host_started
-                        ) / 1e6
-                        tokens.append(token)
-                        logits_by_position.append(logits)
-                        kernel_ms.append(kernel)
-                        device_wall_ms.append(device_wall)
-                        end_to_end_ms.append(end_to_end)
-                    return (
-                        tokens,
-                        logits_by_position,
-                        kernel_ms,
-                        device_wall_ms,
-                        end_to_end_ms,
+                        )
+                        prefill_end_to_end[-1] /= 1e6
+                        prefill_kernel.append(kernel)
+                        prefill_device_wall.append(device_wall)
+                        if logits is not None:
+                            last_logits = logits
+                    assert last_logits is not None
+                    generated = [int(np.argmax(last_logits))]
+                    generated_logits = [last_logits]
+                    time_to_first_ms = (
+                        time.perf_counter_ns() - time_to_first_started
+                    ) / 1e6
+                    decode_kernel: list[float] = []
+                    decode_device_wall: list[float] = []
+                    decode_end_to_end: list[float] = []
+                    for generated_index in range(1, args.generate_tokens):
+                        if generated[-1] in stop_token_ids:
+                            break
+                        position = len(seed_token_ids) + generated_index - 1
+                        host_started = time.perf_counter_ns()
+                        token_hidden = embeddings.row(generated[-1])
+                        logits, kernel, device_wall = registry.step(
+                            token_hidden,
+                            position,
+                            sync_each_layer=sync_each_layer,
+                        )
+                        assert logits is not None
+                        generated.append(int(np.argmax(logits)))
+                        generated_logits.append(logits)
+                        decode_kernel.append(kernel)
+                        decode_device_wall.append(device_wall)
+                        decode_end_to_end.append(
+                            (time.perf_counter_ns() - host_started) / 1e6
+                        )
+                    processed_positions = (
+                        len(seed_token_ids) + len(generated) - 1
                     )
+                    result: dict[str, Any] = {
+                        "prompt_token_ids": seed_token_ids,
+                        "prompt_tokens": len(seed_token_ids),
+                        "generated_token_ids": generated,
+                        "sequence_token_ids": seed_token_ids + generated,
+                        "maximum_tokens_requested": args.generate_tokens,
+                        "tokens_generated": len(generated),
+                        "positions_processed": processed_positions,
+                        "crossed_first_kv_page_boundary": (
+                            processed_positions > 16
+                        ),
+                        "stop_token_ids": sorted(stop_token_ids),
+                        "finish_reason": (
+                            "stop"
+                            if generated[-1] in stop_token_ids
+                            else "length"
+                        ),
+                        "finish_token_id": (
+                            generated[-1]
+                            if generated[-1] in stop_token_ids
+                            else None
+                        ),
+                        "prefill_kernel_ms_per_token": describe(prefill_kernel),
+                        "prefill_device_wall_ms_per_token": describe(
+                            prefill_device_wall
+                        ),
+                        "prefill_end_to_end_ms": sum(prefill_end_to_end),
+                        "prefill_tokens_per_second": (
+                            1000.0
+                            * len(seed_token_ids)
+                            / sum(prefill_end_to_end)
+                        ),
+                        "time_to_first_token_ms": time_to_first_ms,
+                    }
+                    if decode_kernel:
+                        result.update(
+                            decode_steps=len(decode_kernel),
+                            decode_kernel_ms_per_token=describe(decode_kernel),
+                            decode_device_wall_ms_per_token=describe(
+                                decode_device_wall
+                            ),
+                            decode_end_to_end_wall_ms_per_token=describe(
+                                decode_end_to_end
+                            ),
+                            decode_end_to_end_tokens_per_second=(
+                                1000.0 / statistics.mean(decode_end_to_end)
+                            ),
+                        )
+                    return result, generated_logits
 
-                (
-                    generated_tokens,
-                    generated_logits,
-                    generation_kernel,
-                    generation_device_wall,
-                    generation_end_to_end,
-                ) = generate(False)
-                (
-                    oracle_tokens,
-                    oracle_generation_logits,
-                    oracle_generation_kernel,
-                    oracle_generation_device_wall,
-                    _oracle_end_to_end,
-                ) = generate(True)
+                generation_result, generated_logits = generate(False)
+                oracle_generation, oracle_generation_logits = generate(True)
                 generation_maximum_error = max(
                     float(np.max(np.abs(actual - expected)))
                     for actual, expected in zip(
@@ -680,7 +784,10 @@ def main() -> int:
                         strict=True,
                     )
                 )
-                if generated_tokens != oracle_tokens:
+                if (
+                    generation_result["generated_token_ids"]
+                    != oracle_generation["generated_token_ids"]
+                ):
                     raise RuntimeError(
                         "stateful generation token sequence differs from oracle"
                     )
@@ -689,38 +796,43 @@ def main() -> int:
                         "stateful generation logits differ from oracle: "
                         f"max_abs={generation_maximum_error}"
                     )
-                generation_result = {
-                    "input_token_id": args.token_id,
-                    "generated_token_ids": generated_tokens[1:],
-                    "sequence_token_ids": generated_tokens,
-                    "tokens_generated": args.generate_tokens,
-                    "crossed_first_kv_page_boundary": args.generate_tokens > 16,
-                    "kernel_ms_per_token": describe(generation_kernel),
-                    "device_wall_ms_per_token": describe(
-                        generation_device_wall
+                generation_result.update(
+                    input_token_id=(None if args.prompt else args.token_id),
+                    prompt=args.prompt,
+                    rendered_prompt=rendered_prompt,
+                    generated_text=(
+                        tokenizer.decode(
+                            generation_result["generated_token_ids"],
+                            skip_special_tokens=False,
+                        )
+                        if tokenizer is not None
+                        else None
                     ),
-                    "end_to_end_wall_ms_per_token": describe(
-                        generation_end_to_end
+                    layer_synchronized_prefill_kernel_ms_per_token=(
+                        oracle_generation["prefill_kernel_ms_per_token"]
                     ),
-                    "end_to_end_tokens_per_second": (
-                        1000.0 / statistics.mean(generation_end_to_end)
+                    layer_synchronized_decode_kernel_ms_per_token=(
+                        oracle_generation.get("decode_kernel_ms_per_token")
                     ),
-                    "layer_synchronized_kernel_ms_per_token": describe(
-                        oracle_generation_kernel
-                    ),
-                    "layer_synchronized_device_wall_ms_per_token": describe(
-                        oracle_generation_device_wall
-                    ),
-                    "maximum_absolute_error_vs_layer_synchronized_oracle": (
+                    maximum_absolute_error_vs_layer_synchronized_oracle=(
                         generation_maximum_error
                     ),
-                    "token_sequence_matches_oracle": True,
-                }
+                    token_sequence_matches_oracle=True,
+                )
+                decode_kernel = generation_result.get(
+                    "decode_kernel_ms_per_token"
+                )
+                decode_wall = generation_result.get(
+                    "decode_end_to_end_wall_ms_per_token"
+                )
                 print(
-                    f"generated_tokens={args.generate_tokens} "
-                    f"kernel_ms={statistics.median(generation_kernel):.6f} "
-                    f"end_to_end_ms={statistics.median(generation_end_to_end):.6f} "
-                    f"tokens_per_second={generation_result['end_to_end_tokens_per_second']:.6f} "
+                    f"prompt_tokens={len(seed_token_ids)} "
+                    f"generated_tokens={generation_result['tokens_generated']} "
+                    f"finish_reason={generation_result['finish_reason']} "
+                    f"prefill_tps={generation_result['prefill_tokens_per_second']:.6f} "
+                    f"decode_kernel_ms={decode_kernel['median'] if decode_kernel else 0:.6f} "
+                    f"decode_end_to_end_ms={decode_wall['median'] if decode_wall else 0:.6f} "
+                    f"decode_tps={generation_result.get('decode_end_to_end_tokens_per_second', 0):.6f} "
                     f"max_abs={generation_maximum_error:.8g}",
                     flush=True,
                 )
@@ -748,7 +860,7 @@ def main() -> int:
                 "gate_bank_counts": gates,
                 "max_tokens": args.max_tokens,
                 "kv_dtype": args.kv_dtype,
-                "lazy_embedding_rows_touched": 1,
+                "lazy_embedding_rows_touched": len(embeddings.touched),
                 "optional_vision_loaded": False,
                 "optional_mtp_loaded": False,
             },

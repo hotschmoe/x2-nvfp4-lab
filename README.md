@@ -41,6 +41,9 @@ Current highlights on an Adreno X2-90:
 - A 32-token retained-state greedy loop crosses the KV page boundary at
   **12.17 end-to-end tok/s**, with bit-identical logits and token IDs on a
   layer-synchronized replay.
+- With the official tokenizer/chat template, a 30-token coding prompt produces
+  a complete typed Python function and stops on `<|im_end|>` after 183 tokens:
+  **13.86 prefill tok/s / 11.75 decode tok/s**, exact on full replay.
 - Independent CPU/GPU tensor oracles and isolated-process accelerator gates.
 
 Start with [CAMPAIGN_BANDWIDTH_FIRST.md](CAMPAIGN_BANDWIDTH_FIRST.md) and

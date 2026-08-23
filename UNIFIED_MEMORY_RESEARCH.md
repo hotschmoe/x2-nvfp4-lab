@@ -551,10 +551,11 @@ The earlier crashes make benchmark containment part of the architecture:
 
 Prioritized next questions, including work not yet performed:
 
-1. **Tokenizer-backed coding generation.** A 32-token retained-state loop now
-   crosses the first KV page at 12.17 end-to-end tok/s with exact replay. Add the
-   official tokenizer/chat template, prefill a real coding request, and validate
-   readable output rather than the current raw-ID BOS seed.
+1. **Server-facing prefill and sampling.** Official tokenizer-backed coding
+   generation now produces correct code and EOS-stops at 13.86 prefill / 11.75
+   decode tok/s. Replace sequential prefill with shared-weight GEMM batching,
+   add the official top-k 20/top-p 0.95 sampler, and expose request cancellation
+   and streaming through the worker boundary.
 2. **Further MoE fusion.** Device-resident 256-way top-8 and contiguous-bank
    dispatch now pass. Next compare fused gate/up, SiLU/down, shared-slot, and
    weighted-reduction variants, and expose per-kernel component timing.

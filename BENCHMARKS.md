@@ -635,3 +635,46 @@ claim. A tokenizer-backed coding prompt is the next qualification.
 
 Canonical artifact:
 `20260823-043021-424329-moe-full-model-generation.json`.
+
+## Tokenizer-backed coding generation
+
+The official Ornith tokenizer and adjusted chat template turn the request
+"Write a Python function fibonacci(n) with type hints and a short docstring.
+Return only code." into 30 prompt tokens ending at the assistant's `<think>`
+prefix. Prefill is currently correctness-first sequential execution; the LM
+head is skipped for every prompt position except the last.
+
+The complete resident model then greedily generates a reasoning trace followed
+by a fenced, typed iterative implementation with input validation, a docstring,
+and the correct recurrence. It emits checkpoint stop token 248046
+(`<|im_end|>`) after 183 tokens and the loop terminates immediately.
+
+```python
+def fibonacci(n: int) -> int:
+    """Return the nth Fibonacci number (0-indexed)."""
+    if n < 0:
+        raise ValueError("n must be a non-negative integer")
+    a, b = 0, 1
+    for _ in range(n):
+        a, b = b, a + b
+    return a
+```
+
+| Prompt/generation | Result |
+|---|---:|
+| Sequential prefill | 13.8581 tok/s |
+| Time to first token | 2,165.1 ms |
+| Decode kernel median | 78.0368 ms/token |
+| Decode end-to-end median | 84.5639 ms/token |
+| Decode end-to-end mean | 11.7542 tok/s |
+| Stateful positions | 212 |
+| Queued vs synchronized replay | bit-identical logits and tokens |
+
+An earlier length-capped probe exposed that generation must stop at token
+248046; continuing beyond it produced unrelated text. The canonical loop reads
+the official `generation_config.json` stop set (248046 and 248044) and records
+`finish_reason=stop`. Sampling remains greedy even though the official default
+requests top-k 20, top-p 0.95, temperature 1.0.
+
+Canonical artifact:
+`20260823-044101-661462-moe-full-model-generation.json`.

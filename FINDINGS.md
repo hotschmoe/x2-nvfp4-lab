@@ -304,6 +304,15 @@ tokenizer files during this gate, a raw BOS-only seed repeats token 95,726; it
 is not a coding-quality result. The official tokenizer/chat template is the
 next prompt-level gate.
 
+The official tokenizer-backed prompt gate now produces a complete, correct
+typed Fibonacci implementation. Thirty prompt tokens prefill sequentially at
+13.86 tok/s; retained-state decode averages 11.75 end-to-end tok/s over 183
+generated tokens and stops on `<|im_end|>` at position 212. The queued prompt
+and generation are bit-identical to a full layer-synchronized replay. A
+length-capped precursor demonstrated why EOS handling is mandatory: tokens
+after 248046 were unrelated garbage. The current loop loads both official stop
+IDs and reports `finish_reason=stop`.
+
 ## First decoder benchmarks
 
 Direct row-scaled FP8 kernels now accompany NVFP4 in the persistent runtime. A

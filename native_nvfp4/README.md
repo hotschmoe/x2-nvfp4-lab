@@ -115,6 +115,9 @@ scripts/run-isolated.ps1 -Executable $python -TimeoutSeconds 1200 `
 scripts/run-isolated.ps1 -Executable $python -TimeoutSeconds 1200 `
   -CompletionMarker 'MOE_FULL_MODEL_REGISTRY_PASS' `
   -CommandLine '-3 native_nvfp4/bench_moe_full_model.py --gates 24,30,35,40 --max-tokens 32768 --kv-dtype bf16 --warmups 1 --samples 5 --generate-tokens 32'
+scripts/run-isolated.ps1 -Executable $python -TimeoutSeconds 1200 `
+  -CompletionMarker 'MOE_FULL_MODEL_REGISTRY_PASS' `
+  -CommandLine '-3 native_nvfp4/bench_moe_full_model.py --gates 24,30,35,40 --max-tokens 32768 --kv-dtype bf16 --warmups 0 --samples 1 --generate-tokens 192 --prompt "Write a Python function fibonacci(n) with type hints and a short docstring. Return only code."'
 
 # Exact sparse layer: BF16 route, shared expert, top-8 NVFP4 experts, reduction
 scripts/run-isolated.ps1 -Executable $python -TimeoutSeconds 180 `
