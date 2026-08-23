@@ -15,6 +15,8 @@ The current boundary is deliberately explicit:
 - Device-resident RMSNorm, gated norm, elementwise, layout, convolution, and
   gated-delta operators.
 - Native BF16 router/gate GEMV and weighted sparse-expert accumulation.
+- Exact tensor-scaled FP8 matrices for the sparse checkpoint alongside the
+  dense checkpoint's BF16 row-scaled FP8 representation.
 - Contiguous SVM expert banks with device top-8 and direct indexed dispatch.
 - Direct ARM64 NEON NVFP4 GEMV for hybrid placement.
 - Fine-grained buffer SVM is the default native NVFP4 backing. The model-specific
@@ -25,6 +27,8 @@ The current boundary is deliberately explicit:
 - Full-attention online softmax and persistent K/V cache are implemented.
 - Shared 16-token KV pages, per-request block tables, and continuous-batch FP8
   attention/NVFP4 MLP projections are implemented.
+- Paged attention accepts both exact Qwen3.5 head profiles: dense 24/4 and MoE
+  16/2, with independently selectable FP32 or BF16 K/V storage.
 - Sampling, preemption/state transfer, and automatic OOT model-runner attachment
   are not yet implemented.
 

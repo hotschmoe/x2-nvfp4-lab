@@ -27,6 +27,9 @@ Current highlights on an Adreno X2-90:
   and retains a 2 GiB OpenCL safety reserve.
 - Opt-in BF16 paged KV halves cache storage for the dense model with unchanged
   four-layer cadence and `5.64e-5` relative RMSE versus FP32 at batch four.
+- The 35B path now has an exact complete full-attention + MoE decoder layer:
+  tensor-scaled FP8 attention, BF16 paged KV, GPU top-8, shared/routed NVFP4
+  experts, both residuals, 1.392 ms kernel / 1.555 ms wall.
 - Independent CPU/GPU tensor oracles and isolated-process accelerator gates.
 
 Start with [CAMPAIGN_BANDWIDTH_FIRST.md](CAMPAIGN_BANDWIDTH_FIRST.md) and

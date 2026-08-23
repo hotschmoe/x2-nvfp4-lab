@@ -144,11 +144,15 @@ class PagedAttentionPool:
         handle: C.c_void_p,
         max_pages: int,
         kv_dtype: str,
+        query_heads: int,
+        kv_heads: int,
     ):
         self.runtime = runtime
         self.handle = handle
         self.max_pages = max_pages
         self.kv_dtype = kv_dtype
+        self.query_heads = query_heads
+        self.kv_heads = kv_heads
 
     @property
     def free_pages(self) -> int:
@@ -496,6 +500,16 @@ class Runtime:
             C.POINTER(C.c_void_p),
         ]
         self.lib.fp8_matrix_upload.restype = C.c_int
+        self.lib.fp8_matrix_upload_tensor_scaled.argtypes = [
+            C.c_void_p,
+            C.c_void_p,
+            C.c_size_t,
+            C.c_float,
+            C.c_int,
+            C.c_int,
+            C.POINTER(C.c_void_p),
+        ]
+        self.lib.fp8_matrix_upload_tensor_scaled.restype = C.c_int
         self.lib.fp8_matrix_destroy.argtypes = [C.c_void_p]
         self.lib.fp8_linear_f32.argtypes = [
             C.c_void_p,
@@ -626,6 +640,15 @@ class Runtime:
             C.POINTER(C.c_void_p),
         ]
         self.lib.qwen35_paged_attention_pool_create_with_dtype.restype = C.c_int
+        self.lib.qwen35_paged_attention_pool_create_configured.argtypes = [
+            C.c_void_p,
+            C.c_int,
+            C.c_int,
+            C.c_int,
+            C.c_int,
+            C.POINTER(C.c_void_p),
+        ]
+        self.lib.qwen35_paged_attention_pool_create_configured.restype = C.c_int
         self.lib.qwen35_paged_attention_pool_destroy.argtypes = [C.c_void_p]
         self.lib.qwen35_paged_attention_pool_free_pages.argtypes = [C.c_void_p]
         self.lib.qwen35_paged_attention_pool_free_pages.restype = C.c_int
@@ -1037,6 +1060,32 @@ class Runtime:
         )
         return Fp8Matrix(self, handle, weights.shape[0], weights.shape[1])
 
+    def upload_fp8_tensor_scaled(
+        self, weights: np.ndarray, weight_scale: float
+    ) -> Fp8Matrix:
+        if (
+            weights.ndim != 2
+            or weights.dtype != np.uint8
+            or not weights.flags.c_contiguous
+        ):
+            raise ValueError("weights must be contiguous uint8 [rows, cols]")
+        if not np.isfinite(weight_scale) or weight_scale == 0:
+            raise ValueError("weight_scale must be finite and nonzero")
+        handle = C.c_void_p()
+        self._check(
+            self.lib.fp8_matrix_upload_tensor_scaled(
+                self.handle,
+                C.c_void_p(weights.ctypes.data),
+                weights.nbytes,
+                weight_scale,
+                weights.shape[0],
+                weights.shape[1],
+                C.byref(handle),
+            ),
+            "fp8_matrix_upload_tensor_scaled",
+        )
+        return Fp8Matrix(self, handle, weights.shape[0], weights.shape[1])
+
     def linear_fp8(
         self,
         matrix: Fp8Matrix,
@@ -1388,21 +1437,40 @@ class Runtime:
         return out
 
     def create_paged_attention_pool(
-        self, max_pages: int, kv_dtype: str = "fp32"
+        self,
+        max_pages: int,
+        kv_dtype: str = "fp32",
+        query_heads: int = 24,
+        kv_heads: int = 4,
     ) -> PagedAttentionPool:
         if max_pages <= 0:
             raise ValueError("max_pages must be positive")
         dtype_ids = {"fp32": 0, "bf16": 1}
         if kv_dtype not in dtype_ids:
             raise ValueError("kv_dtype must be 'fp32' or 'bf16'")
+        if (
+            query_heads <= 0
+            or query_heads > 64
+            or kv_heads <= 0
+            or kv_heads > query_heads
+            or query_heads % kv_heads
+        ):
+            raise ValueError("query_heads must be divisible by valid kv_heads")
         handle = C.c_void_p()
         self._check(
-            self.lib.qwen35_paged_attention_pool_create_with_dtype(
-                self.handle, max_pages, dtype_ids[kv_dtype], C.byref(handle)
+            self.lib.qwen35_paged_attention_pool_create_configured(
+                self.handle,
+                max_pages,
+                dtype_ids[kv_dtype],
+                query_heads,
+                kv_heads,
+                C.byref(handle),
             ),
-            "qwen35_paged_attention_pool_create_with_dtype",
+            "qwen35_paged_attention_pool_create_configured",
         )
-        return PagedAttentionPool(self, handle, max_pages, kv_dtype)
+        return PagedAttentionPool(
+            self, handle, max_pages, kv_dtype, query_heads, kv_heads
+        )
 
     def create_paged_full_attention_state(
         self, pool: PagedAttentionPool, max_tokens: int

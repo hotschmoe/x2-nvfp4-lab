@@ -79,6 +79,8 @@ scripts/run-isolated.ps1 -Executable $python `
   -CommandLine '-3 native_nvfp4/probe_paged_attention.py'
 scripts/run-isolated.ps1 -Executable $python `
   -CommandLine '-3 native_nvfp4/probe_paged_attention.py --kv-dtype bf16'
+scripts/run-isolated.ps1 -Executable $python `
+  -CommandLine '-3 native_nvfp4/probe_paged_attention.py --profile moe --kv-dtype bf16'
 scripts/run-isolated.ps1 -Executable $python -TimeoutSeconds 300 `
   -CommandLine '-3 native_nvfp4/bench_paged_scheduler.py --tokens 18 --requests 4 --kv-dtype bf16'
 scripts/run-isolated.ps1 -Executable $python -TimeoutSeconds 300 `
@@ -87,6 +89,17 @@ scripts/run-isolated.ps1 -Executable $python -TimeoutSeconds 300 `
 # Real Qwen3.5 four-layer cadence: 3 linear-attention + 1 full-attention
 scripts/run-isolated.ps1 -Executable $python -TimeoutSeconds 300 `
   -CommandLine '-3 native_nvfp4/bench_qwen35_block.py --layer 0 --layer-count 4 --sequence-length 32 --prefill-iterations 3 --decode-tokens 8 --gpu-gated-delta --gpu-causal-conv'
+
+# Exact Ornith tensor-scaled-FP8 attention, then attention + resident MoE bank
+scripts/run-isolated.ps1 -Executable $python `
+  -CompletionMarker 'TENSOR_SCALED_FP8_PASS' `
+  -CommandLine '-3 native_nvfp4/probe_tensor_scaled_fp8.py --rows 256 --vectors 1 --iterations 20'
+scripts/run-isolated.ps1 -Executable $python -TimeoutSeconds 300 `
+  -CompletionMarker 'MOE_FULL_ATTENTION_PASS' `
+  -CommandLine '-3 native_nvfp4/bench_moe_full_attention.py --layer 3 --tokens 18 --kv-dtype bf16'
+scripts/run-isolated.ps1 -Executable $python -TimeoutSeconds 300 `
+  -CompletionMarker 'MOE_FULL_LAYER_PASS' `
+  -CommandLine '-3 native_nvfp4/bench_moe_full_layer.py --layer 3 --kv-dtype bf16 --warmups 5 --samples 30'
 
 # Exact sparse layer: BF16 route, shared expert, top-8 NVFP4 experts, reduction
 scripts/run-isolated.ps1 -Executable $python -TimeoutSeconds 180 `

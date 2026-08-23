@@ -249,6 +249,20 @@ This validates the storage primitive and vLLM lifecycle, not 32K quality or a
 complete dense-model load. FP32 remains the default; the adapter exposes BF16 by
 argument or `VLLM_NVFP4_OPENCL_KV_DTYPE=bf16`.
 
+The same cache path is no longer dense-only. Parameterizing query/KV heads
+preserves the dense 24/4 path and adds Ornith's exact 16/2 GQA shape. MoE BF16
+pages are one quarter the byte size of dense FP32 pages and match an independent
+BF16 storage oracle within `1.04e-7` across a page boundary.
+
+Ornith attention also required exact tensor-scaled FP8 support: its E4M3 weights
+carry one FP32 scale per matrix rather than BF16 row scales. With that native
+format added, real layer-3 full attention measures 0.6309 ms kernel / 0.8407 ms
+wall using BF16 KV. Composing it with post-attention norm and the resident
+device-routed expert bank produces the first complete sparse decoder layer at
+1.3923 ms kernel / 1.5549 ms wall and `5.96e-8` maximum oracle error. This closes
+the full-attention MoE layer arithmetic boundary; full-model cadence/residency
+and MoE linear-attention layers remain open.
+
 ## First decoder benchmarks
 
 Direct row-scaled FP8 kernels now accompany NVFP4 in the persistent runtime. A

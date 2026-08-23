@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstring>
 #include <fstream>
 #include <limits>
@@ -371,6 +372,7 @@ struct fp8_matrix {
     cl_mem scales = nullptr;
     int rows = 0;
     int cols = 0;
+    int scale_kind = 0;
 
     ~fp8_matrix() {
         if (scales) clReleaseMemObject(scales);
@@ -423,6 +425,8 @@ struct qwen35_paged_attention_pool_data {
     cl_mem v_pages = nullptr;
     int max_pages = 0;
     int kv_dtype = 0;
+    int query_heads = 24;
+    int kv_heads = 4;
     size_t storage_bytes = 0;
     std::vector<cl_uint> free_pages;
     mutable std::mutex mutex;
@@ -694,6 +698,10 @@ void enqueue_fp8_linear(
     if (is_tiled) {
         check_cl(clSetKernelArg(kernel, arg++, sizeof(int), &vectors),
                  "clSetKernelArg(vectors)");
+    }
+    check_cl(clSetKernelArg(kernel, arg++, sizeof(int), &matrix->scale_kind),
+             "clSetKernelArg(scale_kind)");
+    if (is_tiled) {
         check_cl(clSetKernelArg(kernel, arg++, static_cast<size_t>(matrix->cols),
                                 nullptr),
                  "clSetKernelArg(weight_local)");
@@ -1888,6 +1896,7 @@ extern "C" NVFP4_API nvfp4_status fp8_matrix_upload(
         holder->runtime = runtime;
         holder->rows = rows;
         holder->cols = cols;
+        holder->scale_kind = 0;
         cl_int status = CL_SUCCESS;
         holder->weights = clCreateBuffer(runtime->context,
             CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, weight_bytes,
@@ -1897,6 +1906,48 @@ extern "C" NVFP4_API nvfp4_status fp8_matrix_upload(
             CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, scale_bytes,
             const_cast<uint16_t *>(scales_bf16), &status);
         check_cl(status, "clCreateBuffer(fp8_scales)");
+        g_last_error.clear();
+        *out_matrix = holder.release();
+        return NVFP4_STATUS_OK;
+    } catch (const opencl_error & error) {
+        return fail(NVFP4_STATUS_OPENCL_ERROR, error);
+    } catch (const std::exception & error) {
+        return fail(NVFP4_STATUS_INTERNAL_ERROR, error);
+    }
+}
+
+extern "C" NVFP4_API nvfp4_status fp8_matrix_upload_tensor_scaled(
+    nvfp4_runtime * runtime,
+    const uint8_t * weights_e4m3,
+    size_t weight_bytes,
+    float weight_scale,
+    int rows,
+    int cols,
+    fp8_matrix ** out_matrix) {
+    if (!runtime || !weights_e4m3 || !out_matrix || rows <= 0 || cols <= 0 ||
+        !std::isfinite(weight_scale) || weight_scale == 0.0f) {
+        return fail_invalid("invalid tensor-scaled FP8 matrix arguments");
+    }
+    const size_t expected_weights = static_cast<size_t>(rows)*cols;
+    if (weight_bytes != expected_weights) {
+        return fail_invalid("FP8 weight byte count does not match rows and cols");
+    }
+    *out_matrix = nullptr;
+    try {
+        auto holder = std::make_unique<fp8_matrix>();
+        holder->runtime = runtime;
+        holder->rows = rows;
+        holder->cols = cols;
+        holder->scale_kind = 1;
+        cl_int status = CL_SUCCESS;
+        holder->weights = clCreateBuffer(runtime->context,
+            CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, weight_bytes,
+            const_cast<uint8_t *>(weights_e4m3), &status);
+        check_cl(status, "clCreateBuffer(fp8_tensor_weights)");
+        holder->scales = clCreateBuffer(runtime->context,
+            CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(weight_scale),
+            &weight_scale, &status);
+        check_cl(status, "clCreateBuffer(fp8_tensor_scale)");
         g_last_error.clear();
         *out_matrix = holder.release();
         return NVFP4_STATUS_OK;
@@ -2644,6 +2695,10 @@ qwen35_full_attention_decode_device_enqueue_f32(
         check_cl(clSetKernelArg(runtime->qwen35_full_attention_prepare, arg++,
                                 sizeof(epsilon), &epsilon),
                  "clSetKernelArg(full_attention_epsilon)");
+        const cl_uint kv_heads = 4;
+        check_cl(clSetKernelArg(runtime->qwen35_full_attention_prepare, arg++,
+                                sizeof(kv_heads), &kv_heads),
+                 "clSetKernelArg(full_attention_kv_heads)");
 
         cl_mem attention_arguments[] = {
             state->q, state->gate, state->k_cache, state->v_cache, dst->data,
@@ -2688,8 +2743,8 @@ extern "C" NVFP4_API nvfp4_status qwen35_paged_attention_pool_create(
     nvfp4_runtime * runtime,
     int max_pages,
     qwen35_paged_attention_pool ** out_pool) {
-    return qwen35_paged_attention_pool_create_with_dtype(
-        runtime, max_pages, 0, out_pool);
+    return qwen35_paged_attention_pool_create_configured(
+        runtime, max_pages, 0, 24, 4, out_pool);
 }
 
 extern "C" NVFP4_API nvfp4_status qwen35_paged_attention_pool_create_with_dtype(
@@ -2697,11 +2752,23 @@ extern "C" NVFP4_API nvfp4_status qwen35_paged_attention_pool_create_with_dtype(
     int max_pages,
     int kv_dtype,
     qwen35_paged_attention_pool ** out_pool) {
-    constexpr size_t page_elements = 16u*4u*256u;
+    return qwen35_paged_attention_pool_create_configured(
+        runtime, max_pages, kv_dtype, 24, 4, out_pool);
+}
+
+extern "C" NVFP4_API nvfp4_status qwen35_paged_attention_pool_create_configured(
+    nvfp4_runtime * runtime,
+    int max_pages,
+    int kv_dtype,
+    int query_heads,
+    int kv_heads,
+    qwen35_paged_attention_pool ** out_pool) {
+    const size_t page_elements = 16u*static_cast<size_t>(kv_heads)*256u;
     const size_t element_bytes =
         kv_dtype == 0 ? sizeof(float) : sizeof(uint16_t);
     if (!runtime || max_pages <= 0 || (kv_dtype != 0 && kv_dtype != 1) ||
-        !out_pool ||
+        query_heads <= 0 || query_heads > 64 || kv_heads <= 0 ||
+        kv_heads > query_heads || query_heads % kv_heads != 0 || !out_pool ||
         static_cast<size_t>(max_pages) >
             std::numeric_limits<size_t>::max()/page_elements/element_bytes) {
         return fail_invalid("invalid paged-attention pool size");
@@ -2713,6 +2780,8 @@ extern "C" NVFP4_API nvfp4_status qwen35_paged_attention_pool_create_with_dtype(
         holder->data->runtime = runtime;
         holder->data->max_pages = max_pages;
         holder->data->kv_dtype = kv_dtype;
+        holder->data->query_heads = query_heads;
+        holder->data->kv_heads = kv_heads;
         const size_t bytes =
             static_cast<size_t>(max_pages)*page_elements*element_bytes;
         holder->data->storage_bytes = 2*bytes;
@@ -2760,7 +2829,6 @@ extern "C" NVFP4_API nvfp4_status qwen35_paged_attention_state_create(
     qwen35_paged_attention_pool * pool,
     int max_tokens,
     qwen35_paged_attention_state ** out_state) {
-    constexpr size_t query_bytes = 24u*256u*sizeof(float);
     if (!pool || !pool->data || max_tokens <= 0 || !out_state) {
         return fail_invalid("invalid paged-attention state arguments");
     }
@@ -2774,6 +2842,8 @@ extern "C" NVFP4_API nvfp4_status qwen35_paged_attention_state_create(
         holder->pool = pool->data;
         holder->max_tokens = max_tokens;
         holder->pages.reserve(max_blocks);
+        const size_t query_bytes =
+            static_cast<size_t>(pool->data->query_heads)*256u*sizeof(float);
         cl_int status = CL_SUCCESS;
         holder->block_table = clCreateBuffer(pool->data->runtime->context,
                                              CL_MEM_READ_WRITE,
@@ -2853,11 +2923,17 @@ qwen35_paged_full_attention_decode_device_enqueue_f32(
     const nvfp4_buffer * sin,
     float epsilon,
     nvfp4_buffer * dst) {
-    constexpr size_t q_projection_bytes = 12288u*sizeof(float);
-    constexpr size_t kv_projection_bytes = 1024u*sizeof(float);
+    const size_t q_projection_bytes =
+        static_cast<size_t>(state && state->pool ? state->pool->query_heads : 0)*
+        512u*sizeof(float);
+    const size_t kv_projection_bytes =
+        static_cast<size_t>(state && state->pool ? state->pool->kv_heads : 0)*
+        256u*sizeof(float);
     constexpr size_t norm_bytes = 256u*sizeof(float);
     constexpr size_t rope_bytes = 64u*sizeof(float);
-    constexpr size_t output_bytes = 24u*256u*sizeof(float);
+    const size_t output_bytes =
+        static_cast<size_t>(state && state->pool ? state->pool->query_heads : 0)*
+        256u*sizeof(float);
     if (!runtime || !state || !state->pool ||
         state->pool->runtime != runtime || state->tokens >= state->max_tokens ||
         !q_proj || q_proj->runtime != runtime ||
@@ -2919,6 +2995,12 @@ qwen35_paged_full_attention_decode_device_enqueue_f32(
         check_cl(clSetKernelArg(prepare_kernel, arg++,
                                 sizeof(epsilon), &epsilon),
                  "clSetKernelArg(paged_attention_epsilon)");
+        const cl_uint query_heads =
+            static_cast<cl_uint>(state->pool->query_heads);
+        const cl_uint kv_heads = static_cast<cl_uint>(state->pool->kv_heads);
+        check_cl(clSetKernelArg(prepare_kernel, arg++,
+                                sizeof(kv_heads), &kv_heads),
+                 "clSetKernelArg(paged_attention_kv_heads)");
 
         cl_mem attention_arguments[] = {
             state->q, state->gate, state->pool->k_pages,
@@ -2936,8 +3018,14 @@ qwen35_paged_full_attention_decode_device_enqueue_f32(
         check_cl(clSetKernelArg(attention_kernel,
                                 arg++, sizeof(tokens), &tokens),
                  "clSetKernelArg(paged_attention_tokens)");
+        check_cl(clSetKernelArg(attention_kernel,
+                                arg++, sizeof(query_heads), &query_heads),
+                 "clSetKernelArg(paged_attention_query_heads)");
+        check_cl(clSetKernelArg(attention_kernel,
+                                arg++, sizeof(kv_heads), &kv_heads),
+                 "clSetKernelArg(paged_attention_kv_heads)");
         const size_t local = 64;
-        const size_t global = 24u*local;
+        const size_t global = static_cast<size_t>(query_heads)*local;
         event_owner prepare_event;
         event_owner attention_event;
         check_cl(clEnqueueNDRangeKernel(runtime->queue,

@@ -1,0 +1,53 @@
+{
+  "campaign": "bandwidth-first",
+  "schema_version": 1,
+  "timestamp": "2026-08-22T20:53:31-07:00",
+  "hardware": {
+    "system_model": "ASUS Zenbook A16 UX3607OA",
+    "gpu": "Qualcomm(R) Adreno(TM) X2-90 GPU"
+  },
+  "environment": {
+    "power_source": "AC",
+    "battery_percent": 100,
+    "thermal_regime": "warm-burst"
+  },
+  "workload": {
+    "operation": "ornith_35b_exact_full_attention_layer",
+    "layer": 3,
+    "kv_dtype": "bf16",
+    "tokens": 18,
+    "hidden": 2048,
+    "query_heads": 16,
+    "kv_heads": 2,
+    "pool_storage_bytes": 65536
+  },
+  "timing": {
+    "kernel_ms": {
+      "median": 0.6308499999999999,
+      "p10": 0.59293,
+      "p90": 0.67093,
+      "minimum": 0.5902,
+      "maximum": 0.6799
+    },
+    "wall_ms": {
+      "median": 0.8407000568695366,
+      "p10": 0.77880002791062,
+      "p90": 0.9254499571397901,
+      "minimum": 0.7618999807164073,
+      "maximum": 0.9633000008761883
+    }
+  },
+  "correctness": {
+    "passed": true,
+    "maximum_absolute_error_vs_storage_oracle": 3.316998481750488e-05,
+    "maximum_absolute_delta_vs_fp32_cache": 0.0035839080810546875,
+    "relative_rmse_vs_fp32_cache": 0.0013383914648275135,
+    "finite_outputs": true,
+    "explicit_completion_marker": true
+  },
+  "limitations": [
+    "one exact full-attention layer, excluding MoE and layer-output norm",
+    "synthetic 18-token decode crosses one page boundary",
+    "timing spans context positions 1 through 18"
+  ]
+}

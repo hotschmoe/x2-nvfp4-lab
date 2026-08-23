@@ -1,0 +1,142 @@
+{
+  "campaign": "bandwidth-first",
+  "schema_version": 1,
+  "timestamp": "2026-08-22T20:56:22-07:00",
+  "hardware": {
+    "system_model": "ASUS Zenbook A16 UX3607OA",
+    "gpu": "Qualcomm(R) Adreno(TM) X2-90 GPU"
+  },
+  "environment": {
+    "power_source": "AC",
+    "battery_percent": 100,
+    "thermal_regime": "warm-burst"
+  },
+  "workload": {
+    "operation": "ornith_35b_complete_full_attention_moe_layer",
+    "layer": 3,
+    "kv_dtype": "bf16",
+    "resident_bank_payload_bytes": 454754304,
+    "kv_pool_storage_bytes": 32768,
+    "selected_experts": [
+      30,
+      177,
+      163,
+      117,
+      75,
+      239,
+      14,
+      92
+    ],
+    "shared_expert_gate": 0.34263593110070273
+  },
+  "loading": {
+    "bank_upload_seconds": 0.23495730001013726,
+    "available_before_bank_bytes": 39112818688,
+    "available_after_bank_bytes": 38614691840
+  },
+  "timing": {
+    "warmups": 5,
+    "samples": 30,
+    "kernel_ms": {
+      "median": 1.39225,
+      "p10": 1.38214,
+      "p90": 1.45842,
+      "minimum": 1.3744,
+      "maximum": 1.4707
+    },
+    "wall_ms": {
+      "median": 1.55485,
+      "p10": 1.5253,
+      "p90": 1.60695,
+      "minimum": 1.5162,
+      "maximum": 2.2213
+    }
+  },
+  "correctness": {
+    "passed": true,
+    "maximum_absolute_error": 5.960464477539063e-08,
+    "expected_router_ids": [
+      30,
+      177,
+      163,
+      117,
+      75,
+      239,
+      14,
+      92
+    ],
+    "finite_outputs": true,
+    "explicit_completion_marker": true
+  },
+  "limitations": [
+    "single-token one-layer decode with one resident expert bank",
+    "linear-attention layers and the complete 40-layer graph are excluded",
+    "full-model residency remains gated beyond 19 expert banks"
+  ],
+  "samples": {
+    "kernel_ms": [
+      1.3765,
+      1.3744,
+      1.3829,
+      1.3835,
+      1.4553,
+      1.4613,
+      1.3826,
+      1.4017,
+      1.4467,
+      1.3843,
+      1.3937,
+      1.4561,
+      1.4494,
+      1.4581,
+      1.378,
+      1.3841,
+      1.4707,
+      1.4022,
+      1.3883,
+      1.3882,
+      1.3908,
+      1.3986,
+      1.3918,
+      1.3892,
+      1.3893,
+      1.3927,
+      1.3855,
+      1.4652,
+      1.3941,
+      1.3992
+    ],
+    "wall_ms": [
+      1.5932,
+      1.5954,
+      1.5968,
+      1.5964,
+      1.6729,
+      1.6041,
+      1.5804,
+      1.5491,
+      1.5606,
+      1.5181,
+      1.5353,
+      1.5975,
+      1.6027,
+      1.6013,
+      1.5162,
+      1.564,
+      2.2213,
+      1.6326,
+      1.5261,
+      1.5174,
+      1.5353,
+      1.5464,
+      1.5334,
+      1.5266,
+      1.5395,
+      1.5478,
+      1.5364,
+      1.6039,
+      1.5491,
+      1.5434
+    ]
+  }
+}

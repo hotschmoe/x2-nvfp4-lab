@@ -461,3 +461,55 @@ Canonical artifacts:
 - `20260822-204046-722776-paged-fp32-batch4.json`
 - `20260822-204050-233641-paged-bf16-batch1.json`
 - `20260822-204058-576796-paged-bf16-batch4.json`
+
+## Exact 35B MoE attention and complete decoder layer
+
+The paged-attention ABI is now head-profile aware. Dense Qwen uses 24 query
+heads/four KV heads; Ornith MoE uses 16/two. Both retain 256-wide heads, the
+interleaved query/gate projection, 64 rotary dimensions, and 16-token pages.
+The four-page/two-request shape gate produced:
+
+| Profile / KV | Pool bytes | Attention-state kernel | Error vs storage oracle | Relative RMSE vs FP32 cache |
+|---|---:|---:|---:|---:|
+| Dense 24/4 FP32 | 524,288 | 0.02915 ms | `8.94e-8` | `1.59e-7` |
+| Dense 24/4 BF16 | 262,144 | 0.02925 ms | `1.19e-7` | `0.00198` |
+| MoE 16/2 FP32 | 262,144 | 0.02875 ms | `8.94e-8` | `1.57e-7` |
+| MoE 16/2 BF16 | 131,072 | 0.02955 ms | `1.04e-7` | `0.00203` |
+
+The real Ornith checkpoint then exposed and closed another format gap: its
+attention matrices are tensor-scaled FP8 E4M3 with one exact FP32 scale, unlike
+the dense model's BF16 row scales. The native FP8 matrix ABI now represents both
+forms without expanding or rounding the scalar scale.
+
+An independent CPU E4M3 decode of a real 256x2048 Q-projection slice agrees with
+the native tensor-scaled kernel within `6.56e-7` for GEMV and `1.31e-6` for four
+vectors. This prevents the composed graph from serving as its own FP8 oracle.
+
+Real layer-3 attention—including input norm, tensor-scaled FP8 Q/K/V, RoPE,
+paged GQA, gating, tensor-scaled FP8 output projection, and residual—passes over
+18 tokens:
+
+| KV | Pool bytes | Median kernel | Median wall | Max error vs storage oracle | Relative RMSE vs FP32 cache |
+|---|---:|---:|---:|---:|---:|
+| FP32 | 131,072 | 0.6433 ms | 0.8505 ms | `4.77e-7` | `2.24e-7` |
+| BF16 | 65,536 | 0.6309 ms | 0.8407 ms | `3.32e-5` | `0.00134` |
+
+Finally, the BF16 graph was composed with post-attention RMSNorm and the real
+layer-3 256-expert bank. The measured token step includes device top-8 routing,
+eight routed experts, the shared expert/gate, weighted reduction, and the second
+residual. All work is queued before one synchronization.
+
+| Complete layer / KV | Expert-bank payload | KV pool | Median kernel | Median wall | Max error |
+|---|---:|---:|---:|---:|---:|
+| FP32 | 454,754,304 B | 65,536 B | 1.3810 ms | 1.5914 ms | `1.19e-7` |
+| BF16 | 454,754,304 B | 32,768 B | 1.3923 ms | 1.5549 ms | `5.96e-8` |
+
+This is the first exact complete sparse decoder layer, not a full-model token.
+Linear-attention layers, final norm/head, sampling, and 40-layer residency are
+still excluded. Canonical artifacts:
+
+- `20260822-204914-258266-paged-attention-moe-bf16.json`
+- `20260822-205331-851639-moe-full-attention-bf16.json`
+- `20260822-205343-046114-moe-full-attention-fp32.json`
+- `20260822-205622-626682-moe-full-layer.json`
+- `20260822-205634-208981-moe-full-layer.json`

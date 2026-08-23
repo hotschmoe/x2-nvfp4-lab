@@ -36,13 +36,17 @@ class ResidentQwen35FullAttention:
         initial_k: np.ndarray | None = None,
         initial_v: np.ndarray | None = None,
         epsilon: float = 1e-6,
+        hidden: int = 5120,
+        query_heads: int = 24,
+        kv_heads: int = 4,
     ):
-        hidden = 5120
-        attention_width = 24 * 256
+        if query_heads <= 0 or kv_heads <= 0 or query_heads % kv_heads:
+            raise ValueError("query_heads must be divisible by kv_heads")
+        attention_width = query_heads * 256
         expected_matrices = (
-            (q_proj, (12288, hidden), "q_proj"),
-            (k_proj, (1024, hidden), "k_proj"),
-            (v_proj, (1024, hidden), "v_proj"),
+            (q_proj, (query_heads * 512, hidden), "q_proj"),
+            (k_proj, (kv_heads * 256, hidden), "k_proj"),
+            (v_proj, (kv_heads * 256, hidden), "v_proj"),
             (o_proj, (hidden, attention_width), "o_proj"),
         )
         for matrix, shape, name in expected_matrices:
@@ -67,6 +71,9 @@ class ResidentQwen35FullAttention:
         self.k_proj = k_proj
         self.v_proj = v_proj
         self.o_proj = o_proj
+        self.hidden = hidden
+        self.query_heads = query_heads
+        self.kv_heads = kv_heads
         self.epsilon = epsilon
         self._closed = False
         self._buffers: list[DeviceBuffer] = []
@@ -88,12 +95,14 @@ class ResidentQwen35FullAttention:
         self.q_norm_weight = upload(q_norm_weight)
         self.k_norm_weight = upload(k_norm_weight)
         self.normalized = create(hidden)
-        self.q_projected = create(12288)
-        self.k_projected = create(1024)
-        self.v_projected = create(1024)
+        self.q_projected = create(query_heads * 512)
+        self.k_projected = create(kv_heads * 256)
+        self.v_projected = create(kv_heads * 256)
         self.attended = create(attention_width)
         self.attention_output = create(hidden)
         if attention_pool is None:
+            if (hidden, query_heads, kv_heads) != (5120, 24, 4):
+                raise ValueError("non-dense attention shapes require a paged pool")
             self.attention_state = runtime.create_full_attention_state(
                 max_tokens, initial_k, initial_v
             )
@@ -102,6 +111,11 @@ class ResidentQwen35FullAttention:
                 raise ValueError("paged attention does not yet import prefix caches")
             if attention_pool.runtime is not runtime:
                 raise ValueError("attention pool belongs to a different runtime")
+            if (
+                attention_pool.query_heads != query_heads
+                or attention_pool.kv_heads != kv_heads
+            ):
+                raise ValueError("attention pool head shape does not match matrices")
             self.attention_state = runtime.create_paged_full_attention_state(
                 attention_pool, max_tokens
             )
@@ -135,7 +149,7 @@ class ResidentQwen35FullAttention:
     ) -> DeviceBuffer:
         if self._closed:
             raise RuntimeError("resident full-attention layer is closed")
-        hidden_bytes = 5120 * np.dtype(np.float32).itemsize
+        hidden_bytes = self.hidden * np.dtype(np.float32).itemsize
         rope_bytes = 64 * np.dtype(np.float32).itemsize
         if x.bytes < hidden_bytes or out.bytes < hidden_bytes:
             raise ValueError("input/output buffer is smaller than hidden size")
@@ -145,7 +159,7 @@ class ResidentQwen35FullAttention:
             x,
             self.input_norm_weight,
             1,
-            5120,
+            self.hidden,
             self.epsilon,
             self.normalized,
         )
@@ -165,7 +179,7 @@ class ResidentQwen35FullAttention:
             out=self.attention_output,
             enqueue=True,
         )
-        return self.runtime.add_device(x, self.attention_output, 5120, out)
+        return self.runtime.add_device(x, self.attention_output, self.hidden, out)
 
     def enqueue_state_from_projected(
         self, cos: DeviceBuffer, sin: DeviceBuffer

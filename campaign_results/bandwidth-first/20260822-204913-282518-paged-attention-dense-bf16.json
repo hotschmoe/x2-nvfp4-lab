@@ -1,0 +1,47 @@
+{
+  "campaign": "bandwidth-first",
+  "schema_version": 1,
+  "timestamp": "2026-08-22T20:49:13-07:00",
+  "hardware": {
+    "system_model": "ASUS Zenbook A16 UX3607OA",
+    "gpu": "Qualcomm(R) Adreno(TM) X2-90 GPU"
+  },
+  "environment": {
+    "power_source": "AC",
+    "battery_percent": 100,
+    "thermal_regime": "warm-burst"
+  },
+  "workload": {
+    "operation": "qwen35_paged_attention_shape_gate",
+    "profile": "dense",
+    "query_heads": 24,
+    "kv_heads": 4,
+    "head_dim": 256,
+    "kv_dtype": "bf16",
+    "requests": 2,
+    "tokens_per_request": 18,
+    "pages": 4,
+    "pool_storage_bytes": 262144,
+    "projected_pool_bytes_all_full_attention_layers": 4194304
+  },
+  "timing": {
+    "samples": 36,
+    "kernel_ms_median": 0.029249999999999998,
+    "kernel_ms_min": 0.0117,
+    "kernel_ms_max": 0.0413,
+    "wall_ms_median": 0.535450002644211
+  },
+  "correctness": {
+    "passed": true,
+    "maximum_absolute_error_vs_storage_oracle": 1.1920928955078125e-07,
+    "maximum_absolute_delta_vs_fp32_cache": 0.0011304020881652832,
+    "relative_rmse_vs_fp32_cache": 0.001975658937558931,
+    "finite_outputs": true,
+    "explicit_completion_marker": true
+  },
+  "limitations": [
+    "synthetic 18-token decode crosses one page boundary",
+    "timing samples span token positions 1 through 18 rather than a fixed context",
+    "this is attention state/softmax only, excluding checkpoint projections"
+  ]
+}

@@ -322,15 +322,26 @@ kernel void nvfp4_native_gemm_tiled(
     }
 }
 
-// Row-scaled FP8 E4M3 companion kernels. The mixed checkpoint stores weights
-// as [rows, cols] bytes and one BF16 multiplier per output row.
+// FP8 E4M3 companion kernels support the dense checkpoint's BF16 row scales
+// (scale_kind=0) and the MoE checkpoint's exact scalar FP32 scale (kind=1).
+static inline float fp8_matrix_scale(
+    global const uchar * scale_data,
+    int row,
+    int scale_kind
+) {
+    return scale_kind == 0
+        ? bf16_to_fp32(((global const ushort *)scale_data)[row])
+        : ((global const float *)scale_data)[0];
+}
+
 kernel void fp8_native_gemv_scalar(
     global const uchar * weights,
-    global const ushort * scales_bf16,
+    global const uchar * scale_data,
     global const float * x,
     global float * dst,
     int cols,
-    int rows
+    int rows,
+    int scale_kind
 ) {
     int row = get_global_id(0);
     if (row >= rows) {
@@ -341,17 +352,18 @@ kernel void fp8_native_gemv_scalar(
     for (int col = 0; col < cols; ++col) {
         sum += e4m3_weight_to_fp32(wr[col])*x[col];
     }
-    dst[row] = sum*bf16_to_fp32(scales_bf16[row]);
+    dst[row] = sum*fp8_matrix_scale(scale_data, row, scale_kind);
 }
 
 __attribute__((qcom_reqd_sub_group_size("half")))
 kernel void fp8_native_gemv_subgroup(
     global const uchar * weights,
-    global const ushort * scales_bf16,
+    global const uchar * scale_data,
     global const float * x,
     global float * dst,
     int cols,
-    int rows
+    int rows,
+    int scale_kind
 ) {
     int row = get_group_id(0);
     int lane = get_sub_group_local_id();
@@ -362,7 +374,7 @@ kernel void fp8_native_gemv_subgroup(
     }
     sum = sub_group_reduce_add(sum);
     if (lane == 0) {
-        dst[row] = sum*bf16_to_fp32(scales_bf16[row]);
+        dst[row] = sum*fp8_matrix_scale(scale_data, row, scale_kind);
     }
 }
 
@@ -371,11 +383,12 @@ __attribute__((reqd_work_group_size(
 __attribute__((qcom_reqd_sub_group_size("half")))
 kernel void fp8_native_gemv_rows_tiled(
     global const uchar * weights,
-    global const ushort * scales_bf16,
+    global const uchar * scale_data,
     global const float * x,
     global float * dst,
     int cols,
-    int rows
+    int rows,
+    int scale_kind
 ) {
     const int subgroup = get_sub_group_id();
     const int lane = get_sub_group_local_id();
@@ -403,19 +416,20 @@ kernel void fp8_native_gemv_rows_tiled(
     }
     sum = sub_group_reduce_add(sum);
     if (row < rows && lane == 0) {
-        dst[row] = sum*bf16_to_fp32(scales_bf16[row]);
+        dst[row] = sum*fp8_matrix_scale(scale_data, row, scale_kind);
     }
 }
 
 __attribute__((qcom_reqd_sub_group_size("half")))
 kernel void fp8_native_gemm_tiled(
     global const uchar * weights,
-    global const ushort * scales_bf16,
+    global const uchar * scale_data,
     global const float * x,
     global float * dst,
     int cols,
     int rows,
     int vectors,
+    int scale_kind,
     local uchar * weight_tile
 ) {
     int row = get_group_id(0);
@@ -440,7 +454,8 @@ kernel void fp8_native_gemm_tiled(
     }
     sum = sub_group_reduce_add(sum);
     if (lane == 0) {
-        dst[vector*rows + row] = sum*bf16_to_fp32(scales_bf16[row]);
+        dst[vector*rows + row] =
+            sum*fp8_matrix_scale(scale_data, row, scale_kind);
     }
 }
 
@@ -874,7 +889,8 @@ kernel void qwen35_full_attention_prepare_decode_f32(
     global float * q,
     global float * gate,
     uint position,
-    float epsilon
+    float epsilon,
+    uint kv_heads
 ) {
     const uint head = get_group_id(0);
     const uint lane = get_sub_group_local_id();
@@ -907,10 +923,10 @@ kernel void qwen35_full_attention_prepare_decode_f32(
             q_proj[q_base + QWEN35_FULL_HEAD_DIM + col];
     }
 
-    if (head < QWEN35_FULL_KV_HEADS) {
+    if (head < kv_heads) {
         const uint source_base = head*QWEN35_FULL_HEAD_DIM;
         const uint cache_base =
-            (position*QWEN35_FULL_KV_HEADS + head)*QWEN35_FULL_HEAD_DIM;
+            (position*kv_heads + head)*QWEN35_FULL_HEAD_DIM;
         float k_sum = 0.0f;
         for (uint col = lane; col < QWEN35_FULL_HEAD_DIM;
              col += NVFP4_SUBGROUP_WIDTH) {
@@ -957,7 +973,8 @@ kernel void qwen35_full_attention_prepare_decode_bf16_kv(
     global float * q,
     global float * gate,
     uint position,
-    float epsilon
+    float epsilon,
+    uint kv_heads
 ) {
     const uint head = get_group_id(0);
     const uint lane = get_sub_group_local_id();
@@ -990,10 +1007,10 @@ kernel void qwen35_full_attention_prepare_decode_bf16_kv(
             q_proj[q_base + QWEN35_FULL_HEAD_DIM + col];
     }
 
-    if (head < QWEN35_FULL_KV_HEADS) {
+    if (head < kv_heads) {
         const uint source_base = head*QWEN35_FULL_HEAD_DIM;
         const uint cache_base =
-            (position*QWEN35_FULL_KV_HEADS + head)*QWEN35_FULL_HEAD_DIM;
+            (position*kv_heads + head)*QWEN35_FULL_HEAD_DIM;
         float k_sum = 0.0f;
         for (uint col = lane; col < QWEN35_FULL_HEAD_DIM;
              col += NVFP4_SUBGROUP_WIDTH) {
@@ -1084,11 +1101,13 @@ kernel void qwen35_paged_full_attention_decode_f32(
     global const float * v_pages,
     global const uint * block_table,
     global float * dst,
-    uint tokens
+    uint tokens,
+    uint query_heads,
+    uint kv_heads
 ) {
     const uint head = get_group_id(0);
     const uint lane = get_sub_group_local_id();
-    const uint kv_head = head/(QWEN35_FULL_HEADS/QWEN35_FULL_KV_HEADS);
+    const uint kv_head = head/(query_heads/kv_heads);
     const uint q_base = head*QWEN35_FULL_HEAD_DIM;
     const float attention_scale = 0.0625f;
     float maximum = -INFINITY;
@@ -1099,7 +1118,7 @@ kernel void qwen35_paged_full_attention_decode_f32(
         const uint page = block_table[token >> 4];
         const uint physical_token = (page << 4) + (token & 15u);
         const uint cache_base =
-            (physical_token*QWEN35_FULL_KV_HEADS + kv_head)*
+            (physical_token*kv_heads + kv_head)*
             QWEN35_FULL_HEAD_DIM;
         float partial = 0.0f;
         for (uint col = lane; col < QWEN35_FULL_HEAD_DIM;
@@ -1136,11 +1155,13 @@ kernel void qwen35_paged_full_attention_decode_bf16_kv(
     global const ushort * v_pages,
     global const uint * block_table,
     global float * dst,
-    uint tokens
+    uint tokens,
+    uint query_heads,
+    uint kv_heads
 ) {
     const uint head = get_group_id(0);
     const uint lane = get_sub_group_local_id();
-    const uint kv_head = head/(QWEN35_FULL_HEADS/QWEN35_FULL_KV_HEADS);
+    const uint kv_head = head/(query_heads/kv_heads);
     const uint q_base = head*QWEN35_FULL_HEAD_DIM;
     const float attention_scale = 0.0625f;
     float maximum = -INFINITY;
@@ -1151,7 +1172,7 @@ kernel void qwen35_paged_full_attention_decode_bf16_kv(
         const uint page = block_table[token >> 4];
         const uint physical_token = (page << 4) + (token & 15u);
         const uint cache_base =
-            (physical_token*QWEN35_FULL_KV_HEADS + kv_head)*
+            (physical_token*kv_heads + kv_head)*
             QWEN35_FULL_HEAD_DIM;
         float partial = 0.0f;
         for (uint col = lane; col < QWEN35_FULL_HEAD_DIM;

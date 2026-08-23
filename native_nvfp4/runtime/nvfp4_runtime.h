@@ -243,6 +243,15 @@ NVFP4_API nvfp4_status fp8_matrix_upload(
     int cols,
     fp8_matrix ** out_matrix);
 
+NVFP4_API nvfp4_status fp8_matrix_upload_tensor_scaled(
+    nvfp4_runtime * runtime,
+    const uint8_t * weights_e4m3,
+    size_t weight_bytes,
+    float weight_scale,
+    int rows,
+    int cols,
+    fp8_matrix ** out_matrix);
+
 NVFP4_API void fp8_matrix_destroy(fp8_matrix * matrix);
 
 NVFP4_API nvfp4_status fp8_linear_f32(
@@ -420,6 +429,16 @@ NVFP4_API nvfp4_status qwen35_paged_attention_pool_create_with_dtype(
     nvfp4_runtime * runtime,
     int max_pages,
     int kv_dtype,
+    qwen35_paged_attention_pool ** out_pool);
+
+// Exact Qwen3.5 dense and MoE shapes share head_dim=256 and rotary_dim=64.
+// query_heads must be divisible by kv_heads.
+NVFP4_API nvfp4_status qwen35_paged_attention_pool_create_configured(
+    nvfp4_runtime * runtime,
+    int max_pages,
+    int kv_dtype,
+    int query_heads,
+    int kv_heads,
     qwen35_paged_attention_pool ** out_pool);
 
 NVFP4_API void qwen35_paged_attention_pool_destroy(
