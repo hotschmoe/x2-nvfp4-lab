@@ -1,0 +1,286 @@
+{
+  "campaign": "bandwidth-first",
+  "schema_version": 1,
+  "timestamp": "2026-08-22T19:29:26-07:00",
+  "hardware": {
+    "system_model": "ARM64",
+    "soc": "ARMv8 (64-bit) Family 8 Model 2 Revision 201, Qualcomm Technologies Inc",
+    "cpu_affinity": [],
+    "cpu_threads": 18,
+    "cpu_sets": [
+      {
+        "id": 256,
+        "group": 0,
+        "logical_processor": 0,
+        "global_index": 0,
+        "core": 0,
+        "last_level_cache": 0,
+        "numa_node": 0,
+        "efficiency_class": 0
+      },
+      {
+        "id": 257,
+        "group": 0,
+        "logical_processor": 1,
+        "global_index": 1,
+        "core": 1,
+        "last_level_cache": 0,
+        "numa_node": 0,
+        "efficiency_class": 0
+      },
+      {
+        "id": 258,
+        "group": 0,
+        "logical_processor": 2,
+        "global_index": 2,
+        "core": 2,
+        "last_level_cache": 0,
+        "numa_node": 0,
+        "efficiency_class": 0
+      },
+      {
+        "id": 259,
+        "group": 0,
+        "logical_processor": 3,
+        "global_index": 3,
+        "core": 3,
+        "last_level_cache": 0,
+        "numa_node": 0,
+        "efficiency_class": 0
+      },
+      {
+        "id": 260,
+        "group": 0,
+        "logical_processor": 4,
+        "global_index": 4,
+        "core": 4,
+        "last_level_cache": 0,
+        "numa_node": 0,
+        "efficiency_class": 0
+      },
+      {
+        "id": 261,
+        "group": 0,
+        "logical_processor": 5,
+        "global_index": 5,
+        "core": 5,
+        "last_level_cache": 0,
+        "numa_node": 0,
+        "efficiency_class": 0
+      },
+      {
+        "id": 262,
+        "group": 0,
+        "logical_processor": 6,
+        "global_index": 6,
+        "core": 6,
+        "last_level_cache": 6,
+        "numa_node": 0,
+        "efficiency_class": 1
+      },
+      {
+        "id": 263,
+        "group": 0,
+        "logical_processor": 7,
+        "global_index": 7,
+        "core": 7,
+        "last_level_cache": 6,
+        "numa_node": 0,
+        "efficiency_class": 1
+      },
+      {
+        "id": 264,
+        "group": 0,
+        "logical_processor": 8,
+        "global_index": 8,
+        "core": 8,
+        "last_level_cache": 6,
+        "numa_node": 0,
+        "efficiency_class": 1
+      },
+      {
+        "id": 265,
+        "group": 0,
+        "logical_processor": 9,
+        "global_index": 9,
+        "core": 9,
+        "last_level_cache": 6,
+        "numa_node": 0,
+        "efficiency_class": 1
+      },
+      {
+        "id": 266,
+        "group": 0,
+        "logical_processor": 10,
+        "global_index": 10,
+        "core": 10,
+        "last_level_cache": 6,
+        "numa_node": 0,
+        "efficiency_class": 1
+      },
+      {
+        "id": 267,
+        "group": 0,
+        "logical_processor": 11,
+        "global_index": 11,
+        "core": 11,
+        "last_level_cache": 6,
+        "numa_node": 0,
+        "efficiency_class": 1
+      },
+      {
+        "id": 268,
+        "group": 0,
+        "logical_processor": 12,
+        "global_index": 12,
+        "core": 12,
+        "last_level_cache": 12,
+        "numa_node": 0,
+        "efficiency_class": 1
+      },
+      {
+        "id": 269,
+        "group": 0,
+        "logical_processor": 13,
+        "global_index": 13,
+        "core": 13,
+        "last_level_cache": 12,
+        "numa_node": 0,
+        "efficiency_class": 1
+      },
+      {
+        "id": 270,
+        "group": 0,
+        "logical_processor": 14,
+        "global_index": 14,
+        "core": 14,
+        "last_level_cache": 12,
+        "numa_node": 0,
+        "efficiency_class": 1
+      },
+      {
+        "id": 271,
+        "group": 0,
+        "logical_processor": 15,
+        "global_index": 15,
+        "core": 15,
+        "last_level_cache": 12,
+        "numa_node": 0,
+        "efficiency_class": 1
+      },
+      {
+        "id": 272,
+        "group": 0,
+        "logical_processor": 16,
+        "global_index": 16,
+        "core": 16,
+        "last_level_cache": 12,
+        "numa_node": 0,
+        "efficiency_class": 1
+      },
+      {
+        "id": 273,
+        "group": 0,
+        "logical_processor": 17,
+        "global_index": 17,
+        "core": 17,
+        "last_level_cache": 12,
+        "numa_node": 0,
+        "efficiency_class": 1
+      }
+    ],
+    "gpu": "Qualcomm(R) Adreno(TM) X2-90 GPU",
+    "npu": "Qualcomm Hexagon v81 (not exercised)",
+    "physical_memory_bytes": 51127103488
+  },
+  "software": {
+    "os_build": "Windows-11-10.0.28000-SP0",
+    "gpu_driver": "OpenCL 3.0 QUALCOMM build: 863.0 Compiler DX.50.39.00",
+    "opencl_version": "OpenCL 3.0 Qualcomm(R) Adreno(TM) X2-90 GPU",
+    "runtime_revision": "959db7f843977332",
+    "kernel_id": "stream-read-v1-1B",
+    "command": [
+      "native_nvfp4/bench_islands.py",
+      "--case",
+      "gpu",
+      "--mib",
+      "64",
+      "--vector-bytes",
+      "1",
+      "--warmups",
+      "1",
+      "--samples",
+      "3"
+    ]
+  },
+  "environment": {
+    "power_source": "AC",
+    "battery_percent": 100,
+    "thermal_regime": "warm-burst",
+    "free_memory_bytes": 38922899456,
+    "opencl_budget_bytes": 25563551744,
+    "opencl_max_allocation_bytes": 2147483648,
+    "opencl_cache_bytes": 1048576,
+    "opencl_local_memory_bytes": 32768,
+    "opencl_compute_units": 16,
+    "opencl_max_clock_mhz": 1,
+    "svm_capabilities": 11
+  },
+  "workload": {
+    "operation": "raw_stream_read_gpu",
+    "format": "raw",
+    "allocation": "opencl_buffer",
+    "rows": 0,
+    "cols": 0,
+    "vectors": 0,
+    "vector_bytes": 1,
+    "passes": 1,
+    "logical_payload_bytes": 67108864
+  },
+  "timing": {
+    "warmups": 1,
+    "samples": 3,
+    "kernel_ms_median": 0.695,
+    "cpu_ms_median": null,
+    "wall_ms_median": 1.4617,
+    "p10_ms": 1.43954,
+    "p90_ms": 5.29002,
+    "minimum_ms": 1.434,
+    "maximum_ms": 6.2471
+  },
+  "bandwidth": {
+    "logical_gbs": 45.911516727098586,
+    "p10_gbs": 17.776225517307473,
+    "p90_gbs": 46.6210001376094,
+    "physical_gbs": null,
+    "matched_island_ceiling_gbs": null,
+    "island_utilization": null,
+    "nominal_system_utilization": 0.20136630143464293
+  },
+  "correctness": {
+    "passed": true,
+    "max_abs_error": null,
+    "checksums": {
+      "gpu_checksum": 11072962560
+    },
+    "finite_timings": true,
+    "explicit_completion_marker": true
+  },
+  "samples": [
+    {
+      "wall_ns": 1461700,
+      "gpu_ns": 690600,
+      "gpu_checksum": 11072962560
+    },
+    {
+      "wall_ns": 6247100,
+      "gpu_ns": 695000,
+      "gpu_checksum": 11072962560
+    },
+    {
+      "wall_ns": 1434000,
+      "gpu_ns": 734600,
+      "gpu_checksum": 11072962560
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+# Checkpoints and converted model artifacts
+/models/
+*.safetensors
+*.gguf
+
+# Upstream working trees (maintained as their own repositories)
+/llama.cpp/
+/vllm/
+
+# Accelerator logs and local research downloads
+/logs/
+/ornith-api.json
+/unsloth-qwen-api.json
+/unsloth-qwen-config.json
+/qualcomm-kernel-page.html
+
+# Native and Python build products
+/native_nvfp4/runtime/build/
+/vllm_nvfp4_opencl/build/
+/vllm_nvfp4_opencl/dist/
+/vllm_nvfp4_opencl/src/*.egg-info/
+/vllm_nvfp4_opencl/src/vllm_nvfp4_opencl/lib/*.dll
+__pycache__/
+*.py[cod]
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+.venv/
+
+# Editor and OS noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

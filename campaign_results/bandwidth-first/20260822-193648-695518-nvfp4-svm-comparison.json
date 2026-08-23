@@ -1,0 +1,233 @@
+{
+  "campaign": "bandwidth-first",
+  "schema_version": 1,
+  "timestamp": "2026-08-22T19:36:48-07:00",
+  "hardware": {
+    "system_model": "ASUS Zenbook A16 UX3607OA",
+    "gpu": "Qualcomm(R) Adreno(TM) X2-90 GPU",
+    "physical_memory_bytes": 51127103488
+  },
+  "software": {
+    "command": [
+      "native_nvfp4/bench_svm_matrix.py",
+      "--rows",
+      "17408",
+      "--cols",
+      "5120",
+      "--warmups",
+      "5",
+      "--samples",
+      "30",
+      "--cpu-threads",
+      "6"
+    ]
+  },
+  "environment": {
+    "power_source": "AC",
+    "battery_percent": 100,
+    "thermal_regime": "warm-interleaved",
+    "available_physical_bytes": {
+      "before_upload": 38770765824,
+      "after_copied_upload": 38720106496,
+      "after_shared_upload": 38669574144,
+      "after_source_arrays_released": 38719799296
+    }
+  },
+  "workload": {
+    "operation": "nvfp4_exact_matrix_svm_comparison",
+    "format": "nvfp4",
+    "tensor": "model.language_model.layers.0.mlp.gate_proj",
+    "rows": 17408,
+    "cols": 5120,
+    "vectors": 1,
+    "logical_payload_bytes": 50135040
+  },
+  "timing": {
+    "warmups": 5,
+    "samples": 30,
+    "kernel_ms": {
+      "copied": {
+        "median": 2.32575,
+        "p10": 2.29345,
+        "p90": 2.33849,
+        "minimum": 2.2806,
+        "maximum": 2.3454
+      },
+      "shared_svm": {
+        "median": 1.4650500000000002,
+        "p10": 1.46206,
+        "p90": 1.46751,
+        "minimum": 1.4593,
+        "maximum": 1.9251
+      }
+    },
+    "wall_ms": {
+      "copied": {
+        "median": 2.4936999999999996,
+        "p10": 2.41064,
+        "p90": 2.56006,
+        "minimum": 2.392,
+        "maximum": 2.9485
+      },
+      "shared_svm": {
+        "median": 1.6332499999999999,
+        "p10": 1.5664500000000001,
+        "p90": 1.6900300000000001,
+        "minimum": 1.5491,
+        "maximum": 2.1462
+      }
+    },
+    "kernel_speedup": 1.5874884816217876,
+    "wall_speedup": 1.5268330016837592
+  },
+  "bandwidth": {
+    "copied_kernel_logical_gbs": 21.556504353434377,
+    "shared_kernel_logical_gbs": 34.22070236510699,
+    "matched_gpu_raw_ceiling_gbs": 129.0,
+    "copied_island_utilization": 0.167104684910344,
+    "shared_island_utilization": 0.2652767625202092,
+    "physical_gbs": null
+  },
+  "correctness": {
+    "passed": true,
+    "copied_gpu_max_abs": 8.344650268554688e-07,
+    "shared_gpu_max_abs": 8.344650268554688e-07,
+    "shared_cpu_max_abs": 2.86102294921875e-06,
+    "gpu_exact_match": true,
+    "explicit_completion_marker": true
+  },
+  "samples": {
+    "kernel_ms": {
+      "copied": [
+        2.3025,
+        2.286,
+        2.2971,
+        2.2937,
+        2.3023,
+        2.2806,
+        2.2983,
+        2.2912,
+        2.3026,
+        2.3262,
+        2.3444,
+        2.3305,
+        2.3384,
+        2.3253,
+        2.3317,
+        2.3269,
+        2.3377,
+        2.3187,
+        2.3454,
+        2.3319,
+        2.33,
+        2.3209,
+        2.325,
+        2.3181,
+        2.3268,
+        2.3292,
+        2.3365,
+        2.3226,
+        2.3393,
+        2.3357
+      ],
+      "shared_svm": [
+        1.4623,
+        1.4622,
+        1.4593,
+        1.4606,
+        1.4623,
+        1.4626,
+        1.466,
+        1.4664,
+        1.9251,
+        1.4662,
+        1.466,
+        1.4657,
+        1.4663,
+        1.463,
+        1.4639,
+        1.4717,
+        1.4661,
+        1.465,
+        1.4694,
+        1.4641,
+        1.4649,
+        1.4608,
+        1.4661,
+        1.4634,
+        1.4638,
+        1.4671,
+        1.4646,
+        1.4662,
+        1.4673,
+        1.4651
+      ]
+    },
+    "wall_ms": {
+      "copied": [
+        2.4092,
+        2.392,
+        2.4141,
+        2.4244,
+        2.4306,
+        2.4108,
+        2.4528,
+        2.519,
+        2.518,
+        2.5459,
+        2.5176,
+        2.4978,
+        2.5064,
+        2.5529,
+        2.5595,
+        2.558,
+        2.5564,
+        2.5651,
+        2.9485,
+        2.5255,
+        2.5222,
+        2.4679,
+        2.4832,
+        2.4828,
+        2.4896,
+        2.4602,
+        2.4485,
+        2.4043,
+        2.4206,
+        2.6534
+      ],
+      "shared_svm": [
+        1.5694,
+        1.5681,
+        1.5905,
+        1.5922,
+        1.6467,
+        1.5927,
+        1.6717,
+        2.0024,
+        2.1462,
+        1.6872,
+        1.6361,
+        1.634,
+        1.6325,
+        1.6281,
+        1.6703,
+        1.7155,
+        1.6835,
+        1.6789,
+        1.6736,
+        1.6585,
+        1.6582,
+        1.6281,
+        1.6325,
+        1.6264,
+        1.6235,
+        1.5948,
+        1.5516,
+        1.5491,
+        1.5502,
+        1.6405
+      ]
+    }
+  }
+}

@@ -1,0 +1,279 @@
+{
+  "campaign": "bandwidth-first",
+  "schema_version": 1,
+  "timestamp": "2026-08-22T19:32:02-07:00",
+  "hardware": {
+    "system_model": "ASUS Zenbook A16 UX3607OA",
+    "soc": "ARMv8 (64-bit) Family 8 Model 2 Revision 201, Qualcomm Technologies Inc",
+    "cpu_affinity": [],
+    "cpu_threads": 18,
+    "cpu_sets": [
+      {
+        "id": 256,
+        "group": 0,
+        "logical_processor": 0,
+        "global_index": 0,
+        "core": 0,
+        "last_level_cache": 0,
+        "numa_node": 0,
+        "efficiency_class": 0
+      },
+      {
+        "id": 257,
+        "group": 0,
+        "logical_processor": 1,
+        "global_index": 1,
+        "core": 1,
+        "last_level_cache": 0,
+        "numa_node": 0,
+        "efficiency_class": 0
+      },
+      {
+        "id": 258,
+        "group": 0,
+        "logical_processor": 2,
+        "global_index": 2,
+        "core": 2,
+        "last_level_cache": 0,
+        "numa_node": 0,
+        "efficiency_class": 0
+      },
+      {
+        "id": 259,
+        "group": 0,
+        "logical_processor": 3,
+        "global_index": 3,
+        "core": 3,
+        "last_level_cache": 0,
+        "numa_node": 0,
+        "efficiency_class": 0
+      },
+      {
+        "id": 260,
+        "group": 0,
+        "logical_processor": 4,
+        "global_index": 4,
+        "core": 4,
+        "last_level_cache": 0,
+        "numa_node": 0,
+        "efficiency_class": 0
+      },
+      {
+        "id": 261,
+        "group": 0,
+        "logical_processor": 5,
+        "global_index": 5,
+        "core": 5,
+        "last_level_cache": 0,
+        "numa_node": 0,
+        "efficiency_class": 0
+      },
+      {
+        "id": 262,
+        "group": 0,
+        "logical_processor": 6,
+        "global_index": 6,
+        "core": 6,
+        "last_level_cache": 6,
+        "numa_node": 0,
+        "efficiency_class": 1
+      },
+      {
+        "id": 263,
+        "group": 0,
+        "logical_processor": 7,
+        "global_index": 7,
+        "core": 7,
+        "last_level_cache": 6,
+        "numa_node": 0,
+        "efficiency_class": 1
+      },
+      {
+        "id": 264,
+        "group": 0,
+        "logical_processor": 8,
+        "global_index": 8,
+        "core": 8,
+        "last_level_cache": 6,
+        "numa_node": 0,
+        "efficiency_class": 1
+      },
+      {
+        "id": 265,
+        "group": 0,
+        "logical_processor": 9,
+        "global_index": 9,
+        "core": 9,
+        "last_level_cache": 6,
+        "numa_node": 0,
+        "efficiency_class": 1
+      },
+      {
+        "id": 266,
+        "group": 0,
+        "logical_processor": 10,
+        "global_index": 10,
+        "core": 10,
+        "last_level_cache": 6,
+        "numa_node": 0,
+        "efficiency_class": 1
+      },
+      {
+        "id": 267,
+        "group": 0,
+        "logical_processor": 11,
+        "global_index": 11,
+        "core": 11,
+        "last_level_cache": 6,
+        "numa_node": 0,
+        "efficiency_class": 1
+      },
+      {
+        "id": 268,
+        "group": 0,
+        "logical_processor": 12,
+        "global_index": 12,
+        "core": 12,
+        "last_level_cache": 12,
+        "numa_node": 0,
+        "efficiency_class": 1
+      },
+      {
+        "id": 269,
+        "group": 0,
+        "logical_processor": 13,
+        "global_index": 13,
+        "core": 13,
+        "last_level_cache": 12,
+        "numa_node": 0,
+        "efficiency_class": 1
+      },
+      {
+        "id": 270,
+        "group": 0,
+        "logical_processor": 14,
+        "global_index": 14,
+        "core": 14,
+        "last_level_cache": 12,
+        "numa_node": 0,
+        "efficiency_class": 1
+      },
+      {
+        "id": 271,
+        "group": 0,
+        "logical_processor": 15,
+        "global_index": 15,
+        "core": 15,
+        "last_level_cache": 12,
+        "numa_node": 0,
+        "efficiency_class": 1
+      },
+      {
+        "id": 272,
+        "group": 0,
+        "logical_processor": 16,
+        "global_index": 16,
+        "core": 16,
+        "last_level_cache": 12,
+        "numa_node": 0,
+        "efficiency_class": 1
+      },
+      {
+        "id": 273,
+        "group": 0,
+        "logical_processor": 17,
+        "global_index": 17,
+        "core": 17,
+        "last_level_cache": 12,
+        "numa_node": 0,
+        "efficiency_class": 1
+      }
+    ],
+    "gpu": "Qualcomm(R) Adreno(TM) X2-90 GPU",
+    "npu": "Qualcomm Hexagon v81 (not exercised)",
+    "physical_memory_bytes": 51127103488
+  },
+  "software": {
+    "os_build": "Windows-11-10.0.28000-SP0",
+    "gpu_driver": "OpenCL 3.0 QUALCOMM build: 863.0 Compiler DX.50.39.00",
+    "opencl_version": "OpenCL 3.0 Qualcomm(R) Adreno(TM) X2-90 GPU",
+    "runtime_revision": "959db7f843977332",
+    "kernel_id": "stream-read-v1-16B",
+    "command": [
+      "native_nvfp4/bench_islands.py",
+      "--case",
+      "gpu",
+      "--shared-svm",
+      "--mib",
+      "64",
+      "--vector-bytes",
+      "16",
+      "--warmups",
+      "1",
+      "--samples",
+      "1"
+    ]
+  },
+  "environment": {
+    "power_source": "AC",
+    "battery_percent": 100,
+    "thermal_regime": "warm-burst",
+    "free_memory_bytes": 38914117632,
+    "opencl_budget_bytes": 25563551744,
+    "opencl_max_allocation_bytes": 2147483648,
+    "opencl_cache_bytes": 1048576,
+    "opencl_local_memory_bytes": 32768,
+    "opencl_compute_units": 16,
+    "opencl_max_clock_mhz": 1,
+    "svm_capabilities": 11
+  },
+  "workload": {
+    "operation": "raw_stream_read_gpu",
+    "format": "raw",
+    "allocation": "shared_svm",
+    "rows": 0,
+    "cols": 0,
+    "vectors": 0,
+    "vector_bytes": 16,
+    "passes": 1,
+    "logical_payload_bytes": 67108864
+  },
+  "timing": {
+    "warmups": 1,
+    "samples": 1,
+    "kernel_ms_median": 0.8126,
+    "cpu_ms_median": null,
+    "wall_ms_median": 1.2866,
+    "p10_ms": 1.2866,
+    "p90_ms": 1.2866,
+    "minimum_ms": 1.2866,
+    "maximum_ms": 1.2866
+  },
+  "bandwidth": {
+    "logical_gbs": 52.15985076946992,
+    "gpu_kernel_logical_gbs": 82.58536057100665,
+    "cpu_logical_gbs": null,
+    "p10_gbs": 52.15985076946992,
+    "p90_gbs": 52.15985076946992,
+    "physical_gbs": null,
+    "matched_island_ceiling_gbs": null,
+    "island_utilization": null,
+    "nominal_system_utilization": 0.22877127530469263
+  },
+  "correctness": {
+    "passed": true,
+    "max_abs_error": null,
+    "checksums": {
+      "gpu_checksum": 711437844480
+    },
+    "finite_timings": true,
+    "explicit_completion_marker": true
+  },
+  "samples": [
+    {
+      "wall_ns": 1286600,
+      "gpu_ns": 812600,
+      "gpu_checksum": 711437844480
+    }
+  ]
+}

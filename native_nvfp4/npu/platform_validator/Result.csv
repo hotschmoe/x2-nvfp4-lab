@@ -1,0 +1,3 @@
+Platform Validator Results:
+Backend,Hardware Backend,Library Prerequisites,Library Version,Backend Core Version,Unit Test,Overall Result
+DSP,Supported,Found,Not Found,Hexagon Architecture V81,Passed,Passed

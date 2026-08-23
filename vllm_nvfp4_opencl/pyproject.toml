@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vllm-nvfp4-opencl"
+version = "0.0.1"
+description = "Out-of-tree native NVFP4 OpenCL linear provider for vLLM"
+requires-python = ">=3.10"
+dependencies = ["numpy", "safetensors", "torch"]
+
+[project.entry-points."vllm.general_plugins"]
+qualcomm_nvfp4_opencl = "vllm_nvfp4_opencl:register"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+vllm_nvfp4_opencl = ["kernels/*.cl", "lib/*.dll", "lib/*.so"]

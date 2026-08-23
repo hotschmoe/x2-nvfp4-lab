@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<OpDefCollection
+        PackageName="NvFp4LinearPackage"
+        Domain="local.nvfp4"
+        Version="0.1"
+        UseQHPI="true"
+>
+    <OpDefList>
+        <OpDef>
+            <Name>NvFp4Linear</Name>
+            <Description>
+                <Content>
+                    Matrix multiplication over checkpoint-native packed E2M1
+                    values, one E4M3 scale per 16 weights, and one global
+                    weight divisor. No persistent dequantized weight exists.
+                </Content>
+            </Description>
+            <Input>
+                <Name>activation</Name>
+                <Description><Content>FP16 matrix [vectors, K]</Content></Description>
+                <Mandatory>true</Mandatory>
+                <Datatype>BACKEND_SPECIFIC</Datatype>
+                <Shape><Rank>2D</Rank><Text>[vectors, K]</Text></Shape>
+            </Input>
+            <Input>
+                <Name>packed_weight</Name>
+                <Description><Content>Two E2M1 values per byte</Content></Description>
+                <Mandatory>true</Mandatory>
+                <Datatype>BACKEND_SPECIFIC</Datatype>
+                <Shape><Rank>2D</Rank><Text>[M, K/2]</Text></Shape>
+            </Input>
+            <Input>
+                <Name>e4m3_scale</Name>
+                <Description><Content>One positive E4M3 scale per 16 weights</Content></Description>
+                <Mandatory>true</Mandatory>
+                <Datatype>BACKEND_SPECIFIC</Datatype>
+                <Shape><Rank>2D</Rank><Text>[M, K/16]</Text></Shape>
+            </Input>
+            <Output>
+                <Name>output</Name>
+                <Description><Content>FP16 matrix [vectors, M]</Content></Description>
+                <Mandatory>true</Mandatory>
+                <Datatype>BACKEND_SPECIFIC</Datatype>
+                <Shape><Rank>2D</Rank><Text>[vectors, M]</Text></Shape>
+            </Output>
+            <Parameter>
+                <Name>weight_global_scale</Name>
+                <Description><Content>Checkpoint divisor applied to local scales</Content></Description>
+                <Mandatory>true</Mandatory>
+                <Datatype>QNN_DATATYPE_FLOAT_32</Datatype>
+                <Shape><Rank>SCALAR</Rank></Shape>
+            </Parameter>
+            <SupportedBackend>HTP_FP16</SupportedBackend>
+        </OpDef>
+    </OpDefList>
+    <SupplementalOpDefList Backend="HTP_FP16">
+        <SupportedOps><OpName>NvFp4Linear</OpName></SupportedOps>
+        <SupplementalOpDef>
+            <Name>NvFp4Linear</Name>
+            <Input>
+                <Name>activation</Name>
+                <Datatype>QNN_DATATYPE_FLOAT_16</Datatype>
+            </Input>
+            <Input>
+                <Name>packed_weight</Name>
+                <Datatype>QNN_DATATYPE_UINT_8</Datatype>
+            </Input>
+            <Input>
+                <Name>e4m3_scale</Name>
+                <Datatype>QNN_DATATYPE_UINT_8</Datatype>
+            </Input>
+            <Output>
+                <Name>output</Name>
+                <Datatype>QNN_DATATYPE_FLOAT_16</Datatype>
+            </Output>
+        </SupplementalOpDef>
+    </SupplementalOpDefList>
+</OpDefCollection>

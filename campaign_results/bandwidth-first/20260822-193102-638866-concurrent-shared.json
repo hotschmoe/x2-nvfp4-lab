@@ -1,0 +1,495 @@
+{
+  "campaign": "bandwidth-first",
+  "schema_version": 1,
+  "timestamp": "2026-08-22T19:31:02-07:00",
+  "hardware": {
+    "system_model": "ASUS Zenbook A16 UX3607OA",
+    "soc": "ARMv8 (64-bit) Family 8 Model 2 Revision 201, Qualcomm Technologies Inc",
+    "cpu_affinity": [
+      12,
+      13,
+      14,
+      15,
+      16,
+      17
+    ],
+    "cpu_threads": 6,
+    "cpu_sets": [
+      {
+        "id": 256,
+        "group": 0,
+        "logical_processor": 0,
+        "global_index": 0,
+        "core": 0,
+        "last_level_cache": 0,
+        "numa_node": 0,
+        "efficiency_class": 0
+      },
+      {
+        "id": 257,
+        "group": 0,
+        "logical_processor": 1,
+        "global_index": 1,
+        "core": 1,
+        "last_level_cache": 0,
+        "numa_node": 0,
+        "efficiency_class": 0
+      },
+      {
+        "id": 258,
+        "group": 0,
+        "logical_processor": 2,
+        "global_index": 2,
+        "core": 2,
+        "last_level_cache": 0,
+        "numa_node": 0,
+        "efficiency_class": 0
+      },
+      {
+        "id": 259,
+        "group": 0,
+        "logical_processor": 3,
+        "global_index": 3,
+        "core": 3,
+        "last_level_cache": 0,
+        "numa_node": 0,
+        "efficiency_class": 0
+      },
+      {
+        "id": 260,
+        "group": 0,
+        "logical_processor": 4,
+        "global_index": 4,
+        "core": 4,
+        "last_level_cache": 0,
+        "numa_node": 0,
+        "efficiency_class": 0
+      },
+      {
+        "id": 261,
+        "group": 0,
+        "logical_processor": 5,
+        "global_index": 5,
+        "core": 5,
+        "last_level_cache": 0,
+        "numa_node": 0,
+        "efficiency_class": 0
+      },
+      {
+        "id": 262,
+        "group": 0,
+        "logical_processor": 6,
+        "global_index": 6,
+        "core": 6,
+        "last_level_cache": 6,
+        "numa_node": 0,
+        "efficiency_class": 1
+      },
+      {
+        "id": 263,
+        "group": 0,
+        "logical_processor": 7,
+        "global_index": 7,
+        "core": 7,
+        "last_level_cache": 6,
+        "numa_node": 0,
+        "efficiency_class": 1
+      },
+      {
+        "id": 264,
+        "group": 0,
+        "logical_processor": 8,
+        "global_index": 8,
+        "core": 8,
+        "last_level_cache": 6,
+        "numa_node": 0,
+        "efficiency_class": 1
+      },
+      {
+        "id": 265,
+        "group": 0,
+        "logical_processor": 9,
+        "global_index": 9,
+        "core": 9,
+        "last_level_cache": 6,
+        "numa_node": 0,
+        "efficiency_class": 1
+      },
+      {
+        "id": 266,
+        "group": 0,
+        "logical_processor": 10,
+        "global_index": 10,
+        "core": 10,
+        "last_level_cache": 6,
+        "numa_node": 0,
+        "efficiency_class": 1
+      },
+      {
+        "id": 267,
+        "group": 0,
+        "logical_processor": 11,
+        "global_index": 11,
+        "core": 11,
+        "last_level_cache": 6,
+        "numa_node": 0,
+        "efficiency_class": 1
+      },
+      {
+        "id": 268,
+        "group": 0,
+        "logical_processor": 12,
+        "global_index": 12,
+        "core": 12,
+        "last_level_cache": 12,
+        "numa_node": 0,
+        "efficiency_class": 1
+      },
+      {
+        "id": 269,
+        "group": 0,
+        "logical_processor": 13,
+        "global_index": 13,
+        "core": 13,
+        "last_level_cache": 12,
+        "numa_node": 0,
+        "efficiency_class": 1
+      },
+      {
+        "id": 270,
+        "group": 0,
+        "logical_processor": 14,
+        "global_index": 14,
+        "core": 14,
+        "last_level_cache": 12,
+        "numa_node": 0,
+        "efficiency_class": 1
+      },
+      {
+        "id": 271,
+        "group": 0,
+        "logical_processor": 15,
+        "global_index": 15,
+        "core": 15,
+        "last_level_cache": 12,
+        "numa_node": 0,
+        "efficiency_class": 1
+      },
+      {
+        "id": 272,
+        "group": 0,
+        "logical_processor": 16,
+        "global_index": 16,
+        "core": 16,
+        "last_level_cache": 12,
+        "numa_node": 0,
+        "efficiency_class": 1
+      },
+      {
+        "id": 273,
+        "group": 0,
+        "logical_processor": 17,
+        "global_index": 17,
+        "core": 17,
+        "last_level_cache": 12,
+        "numa_node": 0,
+        "efficiency_class": 1
+      }
+    ],
+    "gpu": "Qualcomm(R) Adreno(TM) X2-90 GPU",
+    "npu": "Qualcomm Hexagon v81 (not exercised)",
+    "physical_memory_bytes": 51127103488
+  },
+  "software": {
+    "os_build": "Windows-11-10.0.28000-SP0",
+    "gpu_driver": "OpenCL 3.0 QUALCOMM build: 863.0 Compiler DX.50.39.00",
+    "opencl_version": "OpenCL 3.0 Qualcomm(R) Adreno(TM) X2-90 GPU",
+    "runtime_revision": "959db7f843977332",
+    "kernel_id": "stream-read-v1-16B",
+    "command": [
+      "native_nvfp4/bench_islands.py",
+      "--case",
+      "concurrent-shared",
+      "--mib",
+      "64",
+      "--vector-bytes",
+      "16",
+      "--threads",
+      "6",
+      "--cpu-set",
+      "12,13,14,15,16,17",
+      "--warmups",
+      "5",
+      "--samples",
+      "30"
+    ]
+  },
+  "environment": {
+    "power_source": "AC",
+    "battery_percent": 100,
+    "thermal_regime": "warm-burst",
+    "free_memory_bytes": 38912253952,
+    "opencl_budget_bytes": 25563551744,
+    "opencl_max_allocation_bytes": 2147483648,
+    "opencl_cache_bytes": 1048576,
+    "opencl_local_memory_bytes": 32768,
+    "opencl_compute_units": 16,
+    "opencl_max_clock_mhz": 1,
+    "svm_capabilities": 11
+  },
+  "workload": {
+    "operation": "raw_stream_read_concurrent-shared",
+    "format": "raw",
+    "allocation": "shared_svm_same_range",
+    "rows": 0,
+    "cols": 0,
+    "vectors": 0,
+    "vector_bytes": 16,
+    "passes": 1,
+    "logical_payload_bytes": 134217728
+  },
+  "timing": {
+    "warmups": 5,
+    "samples": 30,
+    "kernel_ms_median": 0.6213500000000001,
+    "cpu_ms_median": 1.1091000000000002,
+    "wall_ms_median": 1.2373500000000002,
+    "p10_ms": 1.1176,
+    "p90_ms": 1.6712800000000003,
+    "minimum_ms": 1.0633,
+    "maximum_ms": 3.6637
+  },
+  "bandwidth": {
+    "logical_gbs": 108.49475066185178,
+    "gpu_kernel_logical_gbs": 108.00560330312302,
+    "cpu_logical_gbs": 60.50799986735957,
+    "p10_gbs": 80.34879832920255,
+    "p90_gbs": 120.09547431828508,
+    "physical_gbs": null,
+    "matched_island_ceiling_gbs": null,
+    "island_utilization": null,
+    "nominal_system_utilization": 0.47585416956952536
+  },
+  "correctness": {
+    "passed": true,
+    "max_abs_error": null,
+    "checksums": {
+      "cpu_checksum": 30064771072,
+      "gpu_checksum": 711437844480
+    },
+    "finite_timings": true,
+    "explicit_completion_marker": true
+  },
+  "samples": [
+    {
+      "wall_ns": 1523800,
+      "cpu_ns": 1173300,
+      "gpu_ns": 635200,
+      "cpu_checksum": 30064771072,
+      "gpu_checksum": 711437844480
+    },
+    {
+      "wall_ns": 1481400,
+      "cpu_ns": 1167200,
+      "gpu_ns": 581900,
+      "cpu_checksum": 30064771072,
+      "gpu_checksum": 711437844480
+    },
+    {
+      "wall_ns": 1354300,
+      "cpu_ns": 1209100,
+      "gpu_ns": 591400,
+      "cpu_checksum": 30064771072,
+      "gpu_checksum": 711437844480
+    },
+    {
+      "wall_ns": 1335900,
+      "cpu_ns": 1251100,
+      "gpu_ns": 629600,
+      "cpu_checksum": 30064771072,
+      "gpu_checksum": 711437844480
+    },
+    {
+      "wall_ns": 1361100,
+      "cpu_ns": 1241000,
+      "gpu_ns": 630500,
+      "cpu_checksum": 30064771072,
+      "gpu_checksum": 711437844480
+    },
+    {
+      "wall_ns": 1827700,
+      "cpu_ns": 1272400,
+      "gpu_ns": 547600,
+      "cpu_checksum": 30064771072,
+      "gpu_checksum": 711437844480
+    },
+    {
+      "wall_ns": 1658400,
+      "cpu_ns": 1299700,
+      "gpu_ns": 575800,
+      "cpu_checksum": 30064771072,
+      "gpu_checksum": 711437844480
+    },
+    {
+      "wall_ns": 1623800,
+      "cpu_ns": 1534700,
+      "gpu_ns": 628800,
+      "cpu_checksum": 30064771072,
+      "gpu_checksum": 711437844480
+    },
+    {
+      "wall_ns": 1362100,
+      "cpu_ns": 1297800,
+      "gpu_ns": 630400,
+      "cpu_checksum": 30064771072,
+      "gpu_checksum": 711437844480
+    },
+    {
+      "wall_ns": 1255300,
+      "cpu_ns": 1192900,
+      "gpu_ns": 632800,
+      "cpu_checksum": 30064771072,
+      "gpu_checksum": 711437844480
+    },
+    {
+      "wall_ns": 1400300,
+      "cpu_ns": 1261800,
+      "gpu_ns": 631100,
+      "cpu_checksum": 30064771072,
+      "gpu_checksum": 711437844480
+    },
+    {
+      "wall_ns": 1257400,
+      "cpu_ns": 1080100,
+      "gpu_ns": 609500,
+      "cpu_checksum": 30064771072,
+      "gpu_checksum": 711437844480
+    },
+    {
+      "wall_ns": 1147100,
+      "cpu_ns": 1038700,
+      "gpu_ns": 627800,
+      "cpu_checksum": 30064771072,
+      "gpu_checksum": 711437844480
+    },
+    {
+      "wall_ns": 1787200,
+      "cpu_ns": 995700,
+      "gpu_ns": 523600,
+      "cpu_checksum": 30064771072,
+      "gpu_checksum": 711437844480
+    },
+    {
+      "wall_ns": 1172100,
+      "cpu_ns": 1043800,
+      "gpu_ns": 622900,
+      "cpu_checksum": 30064771072,
+      "gpu_checksum": 711437844480
+    },
+    {
+      "wall_ns": 1108600,
+      "cpu_ns": 1056200,
+      "gpu_ns": 609100,
+      "cpu_checksum": 30064771072,
+      "gpu_checksum": 711437844480
+    },
+    {
+      "wall_ns": 3663700,
+      "cpu_ns": 933200,
+      "gpu_ns": 530100,
+      "cpu_checksum": 30064771072,
+      "gpu_checksum": 711437844480
+    },
+    {
+      "wall_ns": 1219400,
+      "cpu_ns": 1112500,
+      "gpu_ns": 615300,
+      "cpu_checksum": 30064771072,
+      "gpu_checksum": 711437844480
+    },
+    {
+      "wall_ns": 1332400,
+      "cpu_ns": 1199200,
+      "gpu_ns": 643300,
+      "cpu_checksum": 30064771072,
+      "gpu_checksum": 711437844480
+    },
+    {
+      "wall_ns": 1212200,
+      "cpu_ns": 1105900,
+      "gpu_ns": 636600,
+      "cpu_checksum": 30064771072,
+      "gpu_checksum": 711437844480
+    },
+    {
+      "wall_ns": 1156400,
+      "cpu_ns": 1083200,
+      "gpu_ns": 629200,
+      "cpu_checksum": 30064771072,
+      "gpu_checksum": 711437844480
+    },
+    {
+      "wall_ns": 1178500,
+      "cpu_ns": 1021200,
+      "gpu_ns": 614700,
+      "cpu_checksum": 30064771072,
+      "gpu_checksum": 711437844480
+    },
+    {
+      "wall_ns": 1184000,
+      "cpu_ns": 1052500,
+      "gpu_ns": 618200,
+      "cpu_checksum": 30064771072,
+      "gpu_checksum": 711437844480
+    },
+    {
+      "wall_ns": 1184900,
+      "cpu_ns": 1115800,
+      "gpu_ns": 617500,
+      "cpu_checksum": 30064771072,
+      "gpu_checksum": 711437844480
+    },
+    {
+      "wall_ns": 1082900,
+      "cpu_ns": 1024000,
+      "gpu_ns": 618300,
+      "cpu_checksum": 30064771072,
+      "gpu_checksum": 711437844480
+    },
+    {
+      "wall_ns": 1135500,
+      "cpu_ns": 1079800,
+      "gpu_ns": 626000,
+      "cpu_checksum": 30064771072,
+      "gpu_checksum": 711437844480
+    },
+    {
+      "wall_ns": 1182000,
+      "cpu_ns": 1112300,
+      "gpu_ns": 634100,
+      "cpu_checksum": 30064771072,
+      "gpu_checksum": 711437844480
+    },
+    {
+      "wall_ns": 1118600,
+      "cpu_ns": 1078800,
+      "gpu_ns": 622900,
+      "cpu_checksum": 30064771072,
+      "gpu_checksum": 711437844480
+    },
+    {
+      "wall_ns": 1184200,
+      "cpu_ns": 1064900,
+      "gpu_ns": 618700,
+      "cpu_checksum": 30064771072,
+      "gpu_checksum": 711437844480
+    },
+    {
+      "wall_ns": 1063300,
+      "cpu_ns": 1027600,
+      "gpu_ns": 619800,
+      "cpu_checksum": 30064771072,
+      "gpu_checksum": 711437844480
+    }
+  ]
+}
