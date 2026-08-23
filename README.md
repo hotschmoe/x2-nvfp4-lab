@@ -47,6 +47,9 @@ Current highlights on an Adreno X2-90:
 - The dense 27B model now fits and executes too: all 64 layers, its mixed 56
   NVFP4 + 8 FP8 MLP policy, 32K BF16 KV, and the full FP8 head produce a real
   checkpoint token at **1.923 tok/s**, again with exact queued composition.
+- Its tokenizer-backed retained-state loop sustains **1.908 end-to-end tok/s**
+  over 31 measured decode steps; 27-token sequential prefill runs at 2.003
+  tok/s, and a layer-synchronized replay produces identical logits and tokens.
 - Independent CPU/GPU tensor oracles and isolated-process accelerator gates.
 
 Start with [CAMPAIGN_BANDWIDTH_FIRST.md](CAMPAIGN_BANDWIDTH_FIRST.md) and

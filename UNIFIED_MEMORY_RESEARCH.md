@@ -6,17 +6,19 @@ Execution plan: [Campaign: Bandwidth First](CAMPAIGN_BANDWIDTH_FIRST.md)
 
 ## Executive conclusion
 
-The runtime now has a measured, budget-qualified complete Ornith text token.
-Its next milestone is to turn that one-token gate into sustained,
-client-facing autoregressive serving:
+The runtime now has measured, budget-qualified complete tokens and retained
+state generation for both Ornith 35B MoE and dense 27B. The next milestone is
+to turn those proven executor loops into profiled client-facing serving:
 
-1. retain KV, gated-delta, and convolution state across generated tokens;
-2. add tokenizer assets and greedy/top-k/top-p sampling without downloading the
-   entire vocabulary when the policy permits;
-3. measure sustained generation, prefix ingestion, and coding-client request
-   lifecycle under the proven full-residency policy;
+1. add labeled timing spans from HTTP intake through tokenizer, scheduler,
+   embedding upload, decoder subgraphs, logits/sampling, detokenization, and
+   streamed response;
+2. replace sequential prefill with shared-weight GEMM and add top-k/top-p
+   sampling without downloading the entire vocabulary when the policy permits;
+3. measure sustained thermal and multi-request behavior under the proven
+   full-residency policy;
 4. preserve the one-queue device cadence through the existing vLLM adapter;
-5. then compare vLLM, SGLang, and Atlas control-plane behavior on the same native
+5. compare vLLM, SGLang, and Atlas control-plane behavior on the same native
    executor.
 
 The machine has a nominal 228 GB/s memory interface, but that number is the
@@ -556,10 +558,11 @@ Prioritized next questions, including work not yet performed:
    decode tok/s. Replace sequential prefill with shared-weight GEMM batching,
    add the official top-k 20/top-p 0.95 sampler, and expose request cancellation
    and streaming through the worker boundary.
-2. **Dense retained-state generation.** Dense 27B complete residency now passes
-   at 1.923 tok/s with 32K BF16 KV. Add its tokenizer-backed prompt loop, EOS
-   handling, and sustained thermal gate, then profile the 56 NVFP4 versus eight
-   FP8 MLP layers separately.
+2. **Unified serving trace.** Dense retained-state generation now passes at
+   1.908 end-to-end tok/s with exact replay. Add labeled spans for tokenizer,
+   queueing, embedding gather/upload, each decoder component, logits transfer,
+   sampling, detokenization, and SSE; separately profile the dense model's 56
+   NVFP4 versus eight FP8 MLP layers.
 3. **Further MoE fusion.** Device-resident 256-way top-8 and contiguous-bank
    dispatch now pass. Next compare fused gate/up, SiLU/down, shared-slot, and
    weighted-reduction variants, and expose per-kernel component timing.
@@ -570,11 +573,10 @@ Prioritized next questions, including work not yet performed:
    stream dependencies, batched `eval`, buffer reuse, and wired-memory limits
    avoid redundant materialization; test equivalent lifetime classes in the
    SVM arena.
-6. **vLLM versus SGLang control-plane A/B.** Once a complete native token step
-   exists, put the same executor behind each scheduler and compare request
-   admission, prefix reuse, continuous batching, cancellation, structured
-   output, and coding-client compatibility. Backend replacement is not useful
-   before this common native boundary exists.
+6. **vLLM versus SGLang control-plane A/B.** Put the now-complete native token
+   executor behind each scheduler and compare request admission, prefix reuse,
+   continuous batching, cancellation, structured output, and coding-client
+   compatibility with identical prompts and trace spans.
 7. **Multi-request memory pressure.** Complete one-request residency now passes
    for both models, including 40 MoE banks and dense 32K BF16 KV. Add a second
    request's KV/recurrent state, cancellation, page reclamation, and admission

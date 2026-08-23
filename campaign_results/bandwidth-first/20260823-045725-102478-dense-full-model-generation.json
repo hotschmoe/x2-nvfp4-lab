@@ -1,0 +1,282 @@
+{
+  "campaign": "bandwidth-first",
+  "schema_version": 1,
+  "timestamp": "2026-08-23T04:57:25+00:00",
+  "hardware": {
+    "system_model": "ASUS Zenbook A16 UX3607OA",
+    "gpu": "Qualcomm(R) Adreno(TM) X2-90 GPU"
+  },
+  "software": {
+    "command": [
+      "native_nvfp4/bench_dense_full_model.py",
+      "--gates",
+      "16,32,48,56,60,64",
+      "--max-tokens",
+      "32768",
+      "--kv-dtype",
+      "bf16",
+      "--warmups",
+      "0",
+      "--samples",
+      "1",
+      "--generate-tokens",
+      "32",
+      "--prompt",
+      "Write a Python function add(a, b) with type hints. Return only code."
+    ]
+  },
+  "environment": {
+    "power_source": "AC",
+    "battery_percent": 99,
+    "thermal_regime": "warm-burst"
+  },
+  "workload": {
+    "operation": "dense_qwen_full_text_registry_and_token",
+    "layers_loaded": 64,
+    "gate_layer_counts": [
+      16,
+      32,
+      48,
+      56,
+      60,
+      64
+    ],
+    "max_tokens": 32768,
+    "kv_dtype": "bf16",
+    "lazy_embedding_rows_touched": 40,
+    "optional_vision_loaded": false,
+    "optional_mtp_loaded": false,
+    "nvfp4_mlp_layers": 56,
+    "fp8_mlp_layers": 8
+  },
+  "loading": {
+    "load_and_validate_seconds": 10.999222200014628,
+    "total_load_benchmark_and_teardown_seconds": 76.49688490002882,
+    "resident_checkpoint_native_payload_bytes": 19103683968,
+    "complete_text_compute_payload_bytes": 19103683968
+  },
+  "memory": {
+    "baseline_available_physical_bytes": 41074126848,
+    "before_release_available_physical_bytes": 19189125120,
+    "after_release_available_physical_bytes": 40825303040,
+    "recovered_on_release_bytes": 21636177920,
+    "reported_opencl_global_budget_bytes": 25563234304
+  },
+  "gates": [
+    {
+      "layers_resident": 16,
+      "last_layer": 15,
+      "checkpoint_native_payload_bytes": 5495726736,
+      "available_physical_bytes": 33256898560,
+      "available_delta_bytes": -7817228288,
+      "last_layer_composition_maximum_absolute_error": 0.0,
+      "last_layer_mlp_format": "nvfp4"
+    },
+    {
+      "layers_resident": 32,
+      "last_layer": 31,
+      "checkpoint_native_payload_bytes": 9719548192,
+      "available_physical_bytes": 28900511744,
+      "available_delta_bytes": -12173615104,
+      "last_layer_composition_maximum_absolute_error": 0.0,
+      "last_layer_mlp_format": "nvfp4"
+    },
+    {
+      "layers_resident": 48,
+      "last_layer": 47,
+      "checkpoint_native_payload_bytes": 13943369648,
+      "available_physical_bytes": 24587296768,
+      "available_delta_bytes": -16486830080,
+      "last_layer_composition_maximum_absolute_error": 0.0,
+      "last_layer_mlp_format": "nvfp4"
+    },
+    {
+      "layers_resident": 56,
+      "last_layer": 55,
+      "checkpoint_native_payload_bytes": 16055280376,
+      "available_physical_bytes": 22436028416,
+      "available_delta_bytes": -18638098432,
+      "last_layer_composition_maximum_absolute_error": 0.0,
+      "last_layer_mlp_format": "nvfp4"
+    },
+    {
+      "layers_resident": 60,
+      "last_layer": 59,
+      "checkpoint_native_payload_bytes": 17579482172,
+      "available_physical_bytes": 20880142336,
+      "available_delta_bytes": -20193984512,
+      "last_layer_composition_maximum_absolute_error": 0.0,
+      "last_layer_mlp_format": "fp8"
+    },
+    {
+      "layers_resident": 64,
+      "last_layer": 63,
+      "checkpoint_native_payload_bytes": 19103683968,
+      "available_physical_bytes": 19332767744,
+      "available_delta_bytes": -21741359104,
+      "last_layer_composition_maximum_absolute_error": 0.0,
+      "last_layer_mlp_format": "fp8"
+    }
+  ],
+  "full_token": {
+    "input_token_id": 248044,
+    "greedy_output_token_id": 17,
+    "queued_kernel_ms": {
+      "median": 507.6225,
+      "p10": 507.6225,
+      "p90": 507.6225,
+      "minimum": 507.6225,
+      "maximum": 507.6225
+    },
+    "queued_wall_ms": {
+      "median": 514.1191,
+      "p10": 514.1191,
+      "p90": 514.1191,
+      "minimum": 514.1191,
+      "maximum": 514.1191
+    },
+    "wall_tokens_per_second": 1.9450745945832395,
+    "first_queued_kernel_ms": 509.9362,
+    "first_queued_wall_ms": 517.1074,
+    "layer_synchronized_kernel_ms": 502.2659,
+    "layer_synchronized_wall_ms": 561.569,
+    "maximum_absolute_error_vs_layer_synchronized_oracle": 0.0,
+    "finite_logits": true
+  },
+  "generation": {
+    "prompt": "Write a Python function add(a, b) with type hints. Return only code.",
+    "rendered_prompt": "<|im_start|>user\nWrite a Python function add(a, b) with type hints. Return only code.<|im_end|>\n<|im_start|>assistant\n<think>\n",
+    "prompt_token_ids": [
+      248045,
+      846,
+      198,
+      7734,
+      264,
+      12654,
+      709,
+      884,
+      2784,
+      11,
+      292,
+      8,
+      440,
+      913,
+      29642,
+      13,
+      3301,
+      1132,
+      1970,
+      13,
+      248046,
+      198,
+      248045,
+      74455,
+      198,
+      248068,
+      198
+    ],
+    "prompt_tokens": 27,
+    "maximum_tokens_requested": 32,
+    "generated_token_ids": [
+      760,
+      1156,
+      6587,
+      264,
+      4145,
+      12654,
+      709,
+      440,
+      913,
+      29642,
+      421,
+      11039,
+      1330,
+      4947,
+      13,
+      2302,
+      1318,
+      1132,
+      1970,
+      5743,
+      11,
+      874,
+      15673,
+      13,
+      198,
+      248069,
+      271,
+      71093,
+      12305,
+      198,
+      727,
+      884
+    ],
+    "generated_text": "The user wants a simple Python function with type hints that adds two numbers. They want only code returned, no explanation.\n</think>\n\n```python\ndef add",
+    "tokens_generated": 32,
+    "positions_processed": 58,
+    "stop_token_ids": [
+      248044,
+      248046
+    ],
+    "finish_reason": "length",
+    "finish_token_id": null,
+    "prefill_kernel_ms_per_token": {
+      "median": 487.9037,
+      "p10": 484.6042,
+      "p90": 490.51322000000005,
+      "minimum": 483.7678,
+      "maximum": 513.0992
+    },
+    "prefill_end_to_end_ms": 13477.173,
+    "prefill_tokens_per_second": 2.0033875056734822,
+    "time_to_first_token_ms": 13477.335,
+    "decode_steps": 31,
+    "decode_kernel_ms_per_token": {
+      "median": 512.533,
+      "p10": 507.6246,
+      "p90": 514.8487,
+      "minimum": 506.7427,
+      "maximum": 516.0381
+    },
+    "decode_end_to_end_wall_ms_per_token": {
+      "median": 525.9123,
+      "p10": 516.7624,
+      "p90": 528.9915,
+      "minimum": 514.1865,
+      "maximum": 530.476
+    },
+    "decode_end_to_end_tokens_per_second": 1.9078936521122465,
+    "layer_synchronized_prefill_kernel_ms_per_token": {
+      "median": 479.2257,
+      "p10": 477.56723999999997,
+      "p90": 480.77858000000003,
+      "minimum": 476.901,
+      "maximum": 502.9219
+    },
+    "layer_synchronized_decode_kernel_ms_per_token": {
+      "median": 503.545,
+      "p10": 501.6272,
+      "p90": 504.7729,
+      "minimum": 500.7157,
+      "maximum": 505.664
+    },
+    "maximum_absolute_error_vs_layer_synchronized_oracle": 0.0,
+    "token_sequence_matches_oracle": true
+  },
+  "correctness": {
+    "passed": true,
+    "gates_validated": 6,
+    "maximum_gate_layer_error": 0.0,
+    "complete_text_payload_accounted": true,
+    "full_token_executed": true,
+    "stateful_generation_executed": true,
+    "explicit_completion_marker": true
+  },
+  "limitations": [
+    "one request; multi-request scheduling and sustained thermal behavior are not measured",
+    "prefill is sequential batch-one execution rather than shared-weight GEMM",
+    "greedy argmax is performed after downloading full logits",
+    "available physical memory is system-wide, not an OpenCL allocator counter",
+    "vision and MTP tensors are intentionally excluded from the coding endpoint"
+  ]
+}

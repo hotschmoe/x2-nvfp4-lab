@@ -711,6 +711,65 @@ activations are also live. Closing the registry returns 21,683,474,432 bytes.
 | Dense 64 layers + FP8 head | 511.9609 ms | 519.9734 ms | 1.923 tok/s | 17 | `0` |
 
 This is a real complete checkpoint token from a lazy BF16 embedding row, not a
-four-layer projection. The token uses a raw BOS seed; retained-state
-tokenizer-backed generation remains the next dense qualification. Canonical
-artifact: `20260823-045207-005011-dense-full-model-token.json`.
+four-layer projection. The token uses a raw BOS seed. Canonical artifact:
+`20260823-045207-005011-dense-full-model-token.json`.
+
+## Retained-state dense 27B generation
+
+The official tokenizer turns the request "Write a Python function add(a, b)
+with type hints. Return only code." into 27 prompt tokens. The complete model
+then retains all recurrent, convolution, and BF16 KV state for 32 greedy output
+tokens. The short cap ends after the opening of the requested function, so this
+is a state/throughput gate rather than a complete-answer quality claim.
+
+| Prompt/generation | Result |
+|---|---:|
+| Sequential prefill | 2.0034 tok/s |
+| Time to first token | 13,477.3 ms |
+| Decode kernel median | 512.5330 ms/token |
+| Decode end-to-end median | 525.9123 ms/token |
+| Decode end-to-end mean | 1.9079 tok/s |
+| Stateful positions | 58 |
+| Queued vs synchronized replay | bit-identical logits and tokens |
+
+Canonical artifact:
+`20260823-045725-102478-dense-full-model-generation.json`.
+
+## Full-model bandwidth attribution and profiling coverage
+
+Useful model bandwidth counts checkpoint-native bytes used by one token. It is
+not a hardware-counter measurement of DRAM traffic. Dense activates essentially
+all 19,103,683,968 resident text bytes each token. At the 512.533 ms sustained
+decode kernel median that is 37.27 GB/s: 28.9% of the calibrated 129 GB/s
+Adreno raw-read ceiling and 16.3% of the nominal 228 GB/s SoC pin rate. Using
+end-to-end throughput gives 36.45 GB/s, or 28.3% and 16.0% respectively.
+
+The MoE denominator must not include inactive experts. Eight routed experts plus
+the shared expert, routers, attention/recurrent matrices, and the LM head total
+approximately 2.265 GB of useful active payload per token even though 19.808 GB
+is resident. At 78.0368 ms median kernel time this is approximately 29.02 GB/s,
+22.5% of the calibrated ceiling and 12.7% of nominal. End to end it is about
+26.62 GB/s, 20.6% and 11.7% respectively. Small norms, scalar scales, cache
+effects, activation/KV traffic, and repeated physical reads keep this an
+attribution estimate rather than a bus measurement.
+
+The inference core is substantially profiled, but the complete client request
+path is not yet traced as one labeled timeline:
+
+| Stage | Current evidence | Remaining visibility |
+|---|---|---|
+| HTTP/API, tokenization, streaming | tokenizer/template and stop-token correctness | separate HTTP, tokenizer, detokenizer, and SSE timings |
+| Admission and scheduling | paged batch-one/four scheduler microbenchmarks | live vLLM request trace and queue delay |
+| Embedding | lazy row gather and exact row-count accounting | gather and upload timings split from host wall |
+| Decoder layers | operator oracles, complete layers, four-layer cadence, full-model kernel totals | labeled per-kernel full-token trace and hardware counters |
+| KV/recurrent state | page-boundary replay and independent operator oracles | per-stage time/traffic inside the complete model |
+| LM head | isolated Ornith head and both complete model heads | isolated dense FP8 head and device-side partial-logit sampling |
+| Sampling/output | full-logit download plus host argmax included in wall | split download, sampler, detokenization, and stream flush |
+
+At batch one the full-token data already identifies the decoder as the primary
+bottleneck: kernels are 92.3% of MoE median decode wall and 97.5% of dense
+median decode wall. Ten measured MoE four-layer cadences plus its isolated head
+account for about 96.6% of the complete MoE kernel. Dense's early-layer cadence
+projects to roughly 94% of its complete kernel, although its final eight FP8
+MLPs prevent treating that projection as an exact decomposition. Sequential
+single-token prefill is separately the dominant TTFT limitation.

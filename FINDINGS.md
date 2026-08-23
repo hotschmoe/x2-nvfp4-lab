@@ -326,6 +326,22 @@ the per-layer loader leaves 19.60 GB at the same complete device-residency gate
 and returns 21.68 GB on teardown. Source lifetime, not final capacity, was the
 dangerous part.
 
+Dense retained-state decoding now passes a tokenizer-backed 27-token prompt and
+32-token generation gate. Sequential prefill is 2.003 tok/s with 13.477 s TTFT;
+31 measured decode steps average 1.908 end-to-end tok/s with a 512.533 ms median
+kernel and 525.912 ms median wall. Full replay with a synchronization after each
+layer returns bit-identical logits and tokens.
+
+Full-model useful-byte attribution puts dense at 37.27 GB/s during its sustained
+decode kernel (28.9% of the calibrated 129 GB/s GPU raw-read ceiling, 16.3% of
+the nominal 228 GB/s SoC rate). MoE activates only about 2.265 GB of its 19.808
+GB resident payload per token; it reaches about 29.02 GB/s (22.5% calibrated,
+12.7% nominal). These are logical checkpoint-byte rates, not memory-controller
+counters. The current runtime sums OpenCL event durations but does not retain
+kernel labels, and the client-facing tokenizer/scheduler/upload/download/SSE
+path is not yet one unified trace. `BENCHMARKS.md` records the covered and open
+stages.
+
 ## First decoder benchmarks
 
 Direct row-scaled FP8 kernels now accompany NVFP4 in the persistent runtime. A

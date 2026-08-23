@@ -76,6 +76,38 @@ def load_embedding_row(checkpoint: Any, token_id: int) -> np.ndarray:
     )
 
 
+class DenseLazyEmbeddingRows:
+    def __init__(self, checkpoint_path: Path):
+        self._context = safe_open(
+            checkpoint_path, framework="pt", device="cpu"
+        )
+        self._checkpoint = self._context.__enter__()
+        self._slice = self._checkpoint.get_slice(
+            "model.language_model.embed_tokens.weight"
+        )
+        self.shape = self._slice.get_shape()
+        self.touched: set[int] = set()
+        self._closed = False
+
+    def row(self, token_id: int) -> np.ndarray:
+        if self._closed:
+            raise RuntimeError("dense embedding table is closed")
+        if token_id < 0 or token_id >= self.shape[0]:
+            raise ValueError(
+                f"token ID {token_id} is outside vocabulary {self.shape[0]}"
+            )
+        self.touched.add(token_id)
+        return np.ascontiguousarray(
+            self._slice[token_id : token_id + 1].float().numpy()
+        )
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._context.__exit__(None, None, None)
+        self._closed = True
+
+
 @dataclass
 class DenseLayerSlot:
     attention: Any
@@ -308,6 +340,10 @@ class DenseModelRegistry:
         for slot in self.layers:
             slot.attention.reset()
 
+    def begin_sequence(self) -> None:
+        self.reset()
+        self.runtime.synchronize()
+
     def enqueue_layer(self, layer: int, source: Any, destination: Any) -> Any:
         slot = self.layers[layer]
         if slot.full_attention:
@@ -346,15 +382,21 @@ class DenseModelRegistry:
             )
         return maximum_error
 
-    def execute(
+    def step(
         self,
         hidden: np.ndarray,
+        position: int,
         *,
         sync_each_layer: bool,
-    ) -> tuple[np.ndarray, float, float]:
+        project_logits: bool = True,
+    ) -> tuple[np.ndarray | None, float, float]:
         if len(self.layers) != LAYERS or self.head is None:
             raise RuntimeError("complete dense execution requires all 64 layers")
-        self.reset()
+        if position < 0 or position >= self.max_tokens:
+            raise ValueError("position is outside the dense context capacity")
+        cos, sin = rope(position)
+        self.cos.upload(cos)
+        self.sin.upload(sin)
         self.input.upload(hidden)
         self.runtime.synchronize()
         started = time.perf_counter_ns()
@@ -365,15 +407,33 @@ class DenseModelRegistry:
             current = self.enqueue_layer(layer, current, destination)
             if sync_each_layer:
                 kernel_ns += self.runtime.synchronize().kernel_ns
-        self.head.enqueue(current)
+        if project_logits:
+            self.head.enqueue(current)
         profile = self.runtime.synchronize()
         kernel_ns += profile.kernel_ns
-        logits = self.head.logits.download((1, self.head.vocab_size))
+        logits = (
+            self.head.logits.download((1, self.head.vocab_size))
+            if project_logits
+            else None
+        )
         return (
             logits,
             kernel_ns / 1e6,
             (time.perf_counter_ns() - started) / 1e6,
         )
+
+    def execute(
+        self,
+        hidden: np.ndarray,
+        *,
+        sync_each_layer: bool,
+    ) -> tuple[np.ndarray, float, float]:
+        self.begin_sequence()
+        logits, kernel_ms, wall_ms = self.step(
+            hidden, 0, sync_each_layer=sync_each_layer
+        )
+        assert logits is not None
+        return logits, kernel_ms, wall_ms
 
     def close(self) -> None:
         if self._closed:
@@ -405,6 +465,8 @@ def main() -> int:
     parser.add_argument("--token-id", type=int, default=248044)
     parser.add_argument("--warmups", type=int, default=1)
     parser.add_argument("--samples", type=int, default=5)
+    parser.add_argument("--generate-tokens", type=int, default=0)
+    parser.add_argument("--prompt")
     parser.add_argument("--results", type=Path, default=RESULTS)
     args = parser.parse_args()
     gates = [int(value) for value in args.gates.split(",")]
@@ -416,6 +478,8 @@ def main() -> int:
         or args.max_tokens <= 0
         or args.warmups < 0
         or args.samples <= 0
+        or args.generate_tokens < 0
+        or args.generate_tokens > args.max_tokens
     ):
         parser.error("invalid gates, context, warmups, or samples")
 
@@ -440,6 +504,8 @@ def main() -> int:
     checkpoint_payload = upfront_payload
     load_started = time.perf_counter()
     full_result: dict[str, Any] | None = None
+    generation_result: dict[str, Any] | None = None
+    embedding_rows: DenseLazyEmbeddingRows | None = None
     before_release = baseline_available
     after_release = baseline_available
     try:
@@ -534,6 +600,171 @@ def main() -> int:
                 flush=True,
             )
 
+            if args.generate_tokens:
+                from tokenizers import Tokenizer
+
+                tokenizer = Tokenizer.from_file(
+                    str(args.model / "tokenizer.json")
+                )
+                prompt = args.prompt or (
+                    "Write a Python function add(a, b) with type hints. "
+                    "Return only code."
+                )
+                rendered_prompt = (
+                    f"<|im_start|>user\n{prompt}<|im_end|>\n"
+                    "<|im_start|>assistant\n<think>\n"
+                )
+                seed_token_ids = tokenizer.encode(
+                    rendered_prompt, add_special_tokens=False
+                ).ids
+                maximum_positions = (
+                    len(seed_token_ids) + args.generate_tokens - 1
+                )
+                if maximum_positions > args.max_tokens:
+                    raise ValueError(
+                        "dense prompt plus generation exceed context capacity"
+                    )
+                stop_token_ids = {248044, 248046}
+                embedding_rows = DenseLazyEmbeddingRows(checkpoint_path)
+
+                def generate(
+                    sync_each_layer: bool,
+                ) -> tuple[dict[str, Any], list[np.ndarray]]:
+                    registry.begin_sequence()
+                    prefill_kernel: list[float] = []
+                    prefill_end_to_end: list[float] = []
+                    started = time.perf_counter_ns()
+                    last_logits = None
+                    for position, token in enumerate(seed_token_ids):
+                        host_started = time.perf_counter_ns()
+                        logits, kernel, _device_wall = registry.step(
+                            embedding_rows.row(token),
+                            position,
+                            sync_each_layer=sync_each_layer,
+                            project_logits=position == len(seed_token_ids) - 1,
+                        )
+                        prefill_kernel.append(kernel)
+                        prefill_end_to_end.append(
+                            (time.perf_counter_ns() - host_started) / 1e6
+                        )
+                        if logits is not None:
+                            last_logits = logits
+                    assert last_logits is not None
+                    generated = [int(np.argmax(last_logits))]
+                    generated_logits = [last_logits]
+                    time_to_first_ms = (
+                        time.perf_counter_ns() - started
+                    ) / 1e6
+                    decode_kernel: list[float] = []
+                    decode_end_to_end: list[float] = []
+                    for generated_index in range(1, args.generate_tokens):
+                        if generated[-1] in stop_token_ids:
+                            break
+                        position = len(seed_token_ids) + generated_index - 1
+                        host_started = time.perf_counter_ns()
+                        logits, kernel, _device_wall = registry.step(
+                            embedding_rows.row(generated[-1]),
+                            position,
+                            sync_each_layer=sync_each_layer,
+                        )
+                        assert logits is not None
+                        generated.append(int(np.argmax(logits)))
+                        generated_logits.append(logits)
+                        decode_kernel.append(kernel)
+                        decode_end_to_end.append(
+                            (time.perf_counter_ns() - host_started) / 1e6
+                        )
+                    processed_positions = (
+                        len(seed_token_ids) + len(generated) - 1
+                    )
+                    result: dict[str, Any] = {
+                        "prompt": prompt,
+                        "rendered_prompt": rendered_prompt,
+                        "prompt_token_ids": seed_token_ids,
+                        "prompt_tokens": len(seed_token_ids),
+                        "maximum_tokens_requested": args.generate_tokens,
+                        "generated_token_ids": generated,
+                        "generated_text": tokenizer.decode(
+                            generated, skip_special_tokens=False
+                        ),
+                        "tokens_generated": len(generated),
+                        "positions_processed": processed_positions,
+                        "stop_token_ids": sorted(stop_token_ids),
+                        "finish_reason": (
+                            "stop"
+                            if generated[-1] in stop_token_ids
+                            else "length"
+                        ),
+                        "finish_token_id": (
+                            generated[-1]
+                            if generated[-1] in stop_token_ids
+                            else None
+                        ),
+                        "prefill_kernel_ms_per_token": describe(prefill_kernel),
+                        "prefill_end_to_end_ms": sum(prefill_end_to_end),
+                        "prefill_tokens_per_second": (
+                            1000.0
+                            * len(seed_token_ids)
+                            / sum(prefill_end_to_end)
+                        ),
+                        "time_to_first_token_ms": time_to_first_ms,
+                    }
+                    if decode_kernel:
+                        result.update(
+                            decode_steps=len(decode_kernel),
+                            decode_kernel_ms_per_token=describe(decode_kernel),
+                            decode_end_to_end_wall_ms_per_token=describe(
+                                decode_end_to_end
+                            ),
+                            decode_end_to_end_tokens_per_second=(
+                                1000.0 / statistics.mean(decode_end_to_end)
+                            ),
+                        )
+                    return result, generated_logits
+
+                generation_result, generated_logits = generate(False)
+                oracle_generation, oracle_generation_logits = generate(True)
+                maximum_generation_error = max(
+                    float(np.max(np.abs(actual - expected)))
+                    for actual, expected in zip(
+                        generated_logits,
+                        oracle_generation_logits,
+                        strict=True,
+                    )
+                )
+                if (
+                    generation_result["generated_token_ids"]
+                    != oracle_generation["generated_token_ids"]
+                    or maximum_generation_error != 0
+                ):
+                    raise RuntimeError(
+                        "dense stateful generation differs from synchronized replay"
+                    )
+                generation_result.update(
+                    layer_synchronized_prefill_kernel_ms_per_token=(
+                        oracle_generation["prefill_kernel_ms_per_token"]
+                    ),
+                    layer_synchronized_decode_kernel_ms_per_token=(
+                        oracle_generation.get("decode_kernel_ms_per_token")
+                    ),
+                    maximum_absolute_error_vs_layer_synchronized_oracle=(
+                        maximum_generation_error
+                    ),
+                    token_sequence_matches_oracle=True,
+                )
+                decode_tps = generation_result.get(
+                    "decode_end_to_end_tokens_per_second", 0
+                )
+                print(
+                    f"dense_prompt_tokens={len(seed_token_ids)} "
+                    f"generated_tokens={generation_result['tokens_generated']} "
+                    f"finish_reason={generation_result['finish_reason']} "
+                    f"prefill_tps={generation_result['prefill_tokens_per_second']:.6f} "
+                    f"decode_tps={decode_tps:.6f} "
+                    f"max_abs={maximum_generation_error:.8g}",
+                    flush=True,
+                )
+
         before_release = memory_status().available_physical
         registry.close()
         registry = None
@@ -556,7 +787,11 @@ def main() -> int:
                 "gate_layer_counts": gates,
                 "max_tokens": args.max_tokens,
                 "kv_dtype": args.kv_dtype,
-                "lazy_embedding_rows_touched": 1,
+                "lazy_embedding_rows_touched": (
+                    len(embedding_rows.touched)
+                    if embedding_rows is not None
+                    else 1
+                ),
                 "optional_vision_loaded": False,
                 "optional_mtp_loaded": False,
                 "nvfp4_mlp_layers": min(gates[-1], 56),
@@ -577,6 +812,7 @@ def main() -> int:
             },
             "gates": gate_records,
             "full_token": full_result,
+            "generation": generation_result,
             "correctness": {
                 "passed": True,
                 "gates_validated": len(gate_records),
@@ -589,17 +825,36 @@ def main() -> int:
                     or checkpoint_payload == complete_payload
                 ),
                 "full_token_executed": full_result is not None,
+                "stateful_generation_executed": generation_result is not None,
                 "explicit_completion_marker": True,
             },
             "limitations": [
-                "one request and one decoded token; sustained generation is not measured",
+                *(
+                    [
+                        "one request and one decoded token; sustained "
+                        "generation is not measured"
+                    ]
+                    if generation_result is None
+                    else [
+                        "one request; multi-request scheduling and sustained "
+                        "thermal behavior are not measured"
+                    ]
+                ),
+                "prefill is sequential batch-one execution rather than "
+                "shared-weight GEMM",
                 "greedy argmax is performed after downloading full logits",
-                "available physical memory is system-wide, not an OpenCL allocator counter",
-                "vision and MTP tensors are intentionally excluded from the coding endpoint",
+                "available physical memory is system-wide, not an OpenCL "
+                "allocator counter",
+                "vision and MTP tensors are intentionally excluded from the "
+                "coding endpoint",
             ],
         }
         args.results.mkdir(parents=True, exist_ok=True)
-        suffix = "token" if full_result is not None else "residency"
+        suffix = (
+            "generation"
+            if generation_result is not None
+            else ("token" if full_result is not None else "residency")
+        )
         path = args.results / (
             f"{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S-%f')}-"
             f"dense-full-model-{suffix}.json"
@@ -614,6 +869,8 @@ def main() -> int:
     finally:
         if registry is not None:
             registry.close()
+        if embedding_rows is not None:
+            embedding_rows.close()
         runtime.close()
     return 0
 
